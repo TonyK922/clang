@@ -41,9 +41,9 @@ C 语言提供了一些函数，用于与外部设备通信，称为输入输出
 `int sprintf(char *buffer, const char *format, [argument]...);`
 
 ```c
-char str[10];
+char str[32] = "hello world\n";
 
-sprintf(str, "hello world\n");
+sprintf(str, "%s", str);
 puts(str);
 ```
 
@@ -275,7 +275,7 @@ sscanf(str, "%d%d", &i, &j);
 
 `getchar()`函数返回用户从键盘输入的**一个字符**，使用时不带有任何参数。程序运行到这个命令就会暂停，等待用户从键盘输入，等同于使用`scanf()`方法读取一个字符。它的原型定义在头文件`stdio.h`。
 
-getchar是从缓冲区中读取的, 所以如果前面输入过内容, 而没有把缓冲区清空, 就执行getchar的话, getchar就会去缓冲区读取一个字符.
+getchar是从**缓冲区中**读取的, 所以如果前面输入过内容, 而没有把缓冲区清空, 就执行getchar的话, getchar就会去缓冲区读取一个字符.
 
 ```c
 char ch;
@@ -369,7 +369,7 @@ puts("Hello World");
 它经常与`puts()`配合使用。
 
 ```c
-char words[81];
+char words[8];
 
 puts("Enter a string, please");
 gets(words);
@@ -396,14 +396,13 @@ fgets(words, sizeof(words), stdin);
 | 参数           | FILE*  fp :文件流指针。 也可以是stdin标准输入流.             |
 | 返回值         | char * 正常，返 str 指针；出错或遇到文件结尾 返空指针 NULL。 |
 
-- 
-    
+
 
 ## 与prinf, 字符I/O的比较
 
 - 字符串结束判断
 
-  - `scanf`读取字符串时以空格, tab或enter键结束, 但此时空格和回车还留在缓冲区, 会影响后面的输入.
+  - `scanf`读取字符串时以`空格, tab或enter键`结束, 但此时空格和回车还**留在缓冲区**, 会影响后面的输入.
 
   - `gets`以enter键结束, 可以读取中间有空格的字符串. 并且此时回车符没有停留在缓冲区内, 被转换为字符串结束标志'\0' 保存在字符串中.
 
@@ -423,6 +422,8 @@ fgets(words, sizeof(words), stdin);
   `printf` 会先对字符串进行格式化转换, 然后才进行输出. 比如以\n结尾的字符串
 
   如果仅仅是打印一个换行符, puchar('\n'); 效率更高.
+
+  > printf在输出纯字符串时, 反汇编会看到 编译器优化成call puts
 
 - `gets` 有数组越界风险, 需要小心.
 
