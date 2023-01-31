@@ -2,7 +2,7 @@
 
 ## 简介
 
-`typedef`命令用来为某个类型起别名。
+**`typedef`命令用来为某个类型起别名。**
 
 ```c
 typedef type name;
@@ -26,7 +26,7 @@ typedef int antelope, bagel, mushroom;
 
 上面示例中，一次性为`int`类型起了三个别名。
 
-typedef 可以为指针起别名。
+**typedef 可以为指针起别名。**
 
 ```c
 typedef int* intptr;
@@ -37,7 +37,7 @@ intptr x = &a;
 
 上面示例中，`intptr`是`int*`的别名。不过，使用的时候要小心，这样不容易看出来，变量`x`是一个指针类型。
 
-typedef 也可以用来为数组类型起别名。
+**typedef 也可以用来为数组类型起别名。**
 
 ```c
 typedef int five_ints[5];
@@ -47,10 +47,10 @@ five_ints x = {11, 22, 33, 44, 55};
 
 上面示例中，`five_ints`是一个数组类型，包含5个整数的
 
-typedef 为函数起别名的写法如下。
+**typedef 为函数指针起别名的写法如下。**
 
 ```c
-typedef signed char (*fp)(void);
+typedef signed char (*fp)(void); //意思是typedef signed char (*)(void) fp;
 ```
 
 上面示例中，类型别名`fp`是一个指针，代表函数`signed char (*)(void)`。
@@ -178,3 +178,23 @@ Arr* x(void);
 - `Arr`是一个数组，有5个成员，每个成员是`Func`类型。
 - `Func`是一个函数指针，指向一个无参数、返回字符值的函数。
 
+## 遵守作用域规则
+
+块作用域和文件作用域
+
+## 与#define的区别
+
+- #define 在预处理期展开而typedef在编译器处理
+
+- 作用不同:
+
+  ```c
+  #define STRING  char *
+  STRING  a, b;  // 结果是 char *a, b; 只有一个指针, 另一个是char
+  /*---------------------------------------------------------------*/
+  typedef char *  STRING;
+  STRING a, b; //结果是 char *a, *b; 俩都是指针.
+  
+  ```
+
+  

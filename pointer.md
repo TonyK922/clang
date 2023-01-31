@@ -47,7 +47,10 @@ int* foo, bar;
 一个指针指向的可能还是指针，这时就要用两个星号`**`表示。这种指针称为二级指针.
 
 ```c
-int** foo;
+int** foo; //最终指向int的变量, 但这个指针是先指向一个指针, 指向的指针里存着int变量的地址.
+int a = 10;
+int *p = &a; 
+int **foo = &p; /*foo 对foo的值(p的地址)解引用得到p的值(a地址), **foo对a的地址解引用得到a的值
 ```
 
 上面示例表示变量`foo`是一个指针，指向的还是一个指针，第二个指针指向的则是一个整数。
@@ -421,3 +424,110 @@ int* p[3] = {&a, &b, &c};
 void printFunc(int len, char *ps[]); //这样就可以了.
 ```
 
+## 字符串与指针
+
+- 字符串指针的定义, 初始化与使用
+
+  ```c
+  //字符串字面量以数组的形式存在静态内存区; 指针变量在栈中, 指向这块静态存储区.
+  char *str = "hello world!"; 
+  //也可以用循环把字符串打印出来
+  ```
+
+- 字符串指针作为函数的参数
+
+  ```c
+  void stringCpy(char *dest, const char *src)
+  {
+      while((*dest++ = *src++) != '\0');
+  }
+  //举例:
+  char *src = "hello"; //内存里就是h e l l o \0
+  char dest[20] = "we are famulei";//这里注意如果dest比src空间小. 有可能就会越界.
+  stringCpy(dest, src); //dest中的数据: hello\0 famulei\0 所以按%s打印, 就到hello就没了
+  ```
+
+- 字符串指针变量与字符数组的区别
+
+  字符数组, 是个数组, 可以在动态和静态内存区, 里面每个元素都是char. 不自动加'\0' 作为结尾.
+
+  字符串指针变量, 指针变量可以在静态或动态区, 而字符串字面量, 保存在静态区.
+
+## 二级指针
+
+指向指针的指针变量, 就是二级指针. ( 理解: 变量的地址, 变量的值.)
+
+```c
+int i = 8;
+int* p = &i;
+int** pp = &p; //pp中的值就是p的地址, *pp就能取到p的值, P的值, 是i的地址, 所以**pp就是i的值.
+```
+
+二级指针操作变量, 二级指针操作数组, 核心还是, 理解变量的地址, 变量的值.对地址解引用得到地址里的值.
+
+二级指针操作指针数组.
+
+```c
+char *str[] ={
+  "hello",
+  "world",
+  "goodbye"
+};
+char **p = str; //p是数组元素的地址, *p得到的数组元素的值(内存地址). **P 就是最终的值.但是字符串打印,给*p就行.
+printf("%s \n", *(p+1)); //str[1]的值
+```
+
+二级指针作函数参数
+
+```c
+void arrayPrint(unsigned len, char **p);
+```
+
+## 指向函数的指针
+
+C语言无论是定义变量还是定义函数 ,都是个符号(token), 根据符号表找对应的地址. 
+
+指向函数的指针, 就是函数指针.
+
+```c
+int (*funptr)(int, int);
+int addFunc(int , int);
+
+int addFunc(int a, int b)
+{
+    return a+b;
+}
+funptr = addFunc;
+funptr(a,b);// (*funptr)(a,b);   (**funptr)(a,b); 不论解多少次引用, 得到的都是函数入口地址.
+```
+
+函数指针作为函数的参数.
+
+```c
+//接上面的代码
+void calc(int a, int b, int (*fp)(int x, int y));
+void calc(int a, int b, int (*fp)(int x, int y))
+{
+    int reslt = fp(a,b);
+    printf("result = %d\n", reslt);
+}
+int main()
+{
+    int a = 3 , b = 4;
+    calc(a, b, addFunc);
+}
+```
+
+## 指针函数
+
+就是返回值是指针的函数.
+
+```c
+char* getMonth(int n);
+```
+
+**重要注意点:**
+
+**返回的指针, 注意它的生命周期, 不能返回一个已经被释放掉的地址.**
+
+虽然能访问取值, 但你往里面写数据, 就会出问题. 因为这个地址, 可能会被系统分配给别人用.
