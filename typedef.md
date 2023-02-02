@@ -2,7 +2,7 @@
 
 ## 简介
 
-**`typedef`命令用来为某个类型起别名。**
+**`typedef`命令用来为某个已存在的类型起别名。遵守作用域原则.**
 
 ```c
 typedef type name;
@@ -33,6 +33,7 @@ typedef int* intptr;
 
 int a = 10;
 intptr x = &a;
+intptr c , d; // == int* c, * d;
 ```
 
 上面示例中，`intptr`是`int*`的别名。不过，使用的时候要小心，这样不容易看出来，变量`x`是一个指针类型。
@@ -40,9 +41,10 @@ intptr x = &a;
 **typedef 也可以用来为数组类型起别名。**
 
 ```c
-typedef int five_ints[5];
+typedef int five_ints[5]; //注意数组大小写最后.
 
-five_ints x = {11, 22, 33, 44, 55};
+five_ints x = {11, 22, 33, 44, 55}; // == int x[5]
+five_ints a[2]; //a[2][5]
 ```
 
 上面示例中，`five_ints`是一个数组类型，包含5个整数的
@@ -51,6 +53,7 @@ five_ints x = {11, 22, 33, 44, 55};
 
 ```c
 typedef signed char (*fp)(void); //意思是typedef signed char (*)(void) fp;
+fp p = func;
 ```
 
 上面示例中，类型别名`fp`是一个指针，代表函数`signed char (*)(void)`。
@@ -119,7 +122,7 @@ typedef long double app_float;
 
 上面命令将变量`f1`、`f2`、`f3`的类型都改为`long double`。
 
-（4）可移植性
+**（4）可移植性**
 
 某一个值在不同计算机上的类型，可能是不一样的。
 

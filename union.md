@@ -108,6 +108,35 @@ Union 结构的好处，主要是节省空间。它将一段内存空间，重�
 
 共用体的地址, 只有一块地址.
 
-共用体不可以作为函数参数或者返回值.
+`共用体不可以作为函数参数或者返回值.`
 
-结构体跟共用体可以嵌套使用.
+**结构体跟共用体可以嵌套使用.**
+
+```c
+struct foo {
+	char name[16];
+    int  age; 
+};
+union fo{
+    struct foo a;
+    int b;
+};
+// 结构体 foo 先声明name 还是age 对共用体中, int b的值是不一样的.
+```
+
+共用体也多用于驱动开发中对于某些寄存器位的控制.
+
+```c
+union lcd_reg{
+    struct lcd_control
+    {
+        int lcd_clr:2;
+        int lcd_on:1;
+        int lcd_cor:5;
+    }lcd_bit;
+    int lcd_data;
+}a;
+a.lcd_data = 0;
+a.lcd_bit.lcd_cor = 1;
+```
+
