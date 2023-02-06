@@ -21,7 +21,8 @@ BYTE c = 'z';
 typedef 可以一次指定多个别名。
 
 ```c
-typedef int antelope, bagel, mushroom;
+typedef int antelope, bagel, *mushroom;
+//mushroom 是个指针类型,用mushroom声明的变量 都是指针.typedef int * mushroom
 ```
 
 上面示例中，一次性为`int`类型起了三个别名。
