@@ -451,7 +451,7 @@ while(fscanf(fp, "%s", words) == 1)
 - windows 平台在写入'\n'是会体现为'\r\n'，linux 平台在写入'\n'时会体现为'\n'。windows 平台在读入'\r\n'时，体现为一个字符'\n'，linux 平台在读入'\n'时，体现为一个字符'\n'
 - linux 读 windows 中的换行，则会多读一个字符，windows 读 linux 中的换行，则没有问题
 
-| 函数声明 | char *fgets(char *str,int length,FILE *fp)                   |
+| 函数声明 | char \*fgets(char \*str,int length,FILE \*fp)        |
 | -------- | ------------------------------------------------------------ |
 | 所在文件 | stdio.h                                                      |
 | 函数功能 | 从 fp 所指向的文件中，至多读 length-1 个字符，送入字符数组 str 中， 如果在读入 length-1 个字符结束前遇\n 或 EOF，读入即结束，字符串读入后在最后加一个‘\0’字符。 |
@@ -526,13 +526,13 @@ puts("Done.");
 
 ## fputs()
 
-| 函数声明       | int fputs(char *str,FILE *fp)             |
+| 函数声明       | int fputs(char \*str,FILE \*fp)             |
 | -------------- | ----------------------------------------- |
 | 所在文件       | stdio.h                                   |
 | 函数功能       | 把 str 指向的字符串写入 fp 指向的文件中。 |
 | 参数及返回解析 |                                           |
-| 参数           | char * str : 表示指向的字符串的指针。     |
-| 参数           | FILE *fp : 指向文件流结构的指针。         |
+| 参数           | char \* str : 表示指向的字符串的指针。     |
+| 参数           | FILE \*fp : 指向文件流结构的指针。         |
 | 返回值         | int 正常，返 0；出错返 EOF。              |
 
 `fputs()`函数用于向文件写入字符串，和`puts()`函数只有一点不同，那就是它不会在字符串末尾添加换行符。这是因为`fgets()`保留了换行符，所以`fputs()`就不添加了。`fputs()`函数通常与`fgets()`配对使用。
@@ -566,14 +566,14 @@ fputs(words, stdout);
 
 - 一次写入一块数据
 
-| 函数声明 | int fwrite(void *buffer, int num_bytes, int count, FILE *fp) |
+| 函数声明 | int fwrite(void \*buffer, int num_bytes, int count, FILE \*fp) |
 | -------- | ------------------------------------------------------------ |
 | 所在文件 | stdio.h                                                      |
 | 函数功能 | 把buffer 指向的数据写入fp 指向的文件中                       |
-| 参数     | char * buffer : 指向要写入数据存储区的首地址的指针           |
+| 参数     | char \* buffer : 指向要写入数据存储区的首地址的指针           |
 |          | int num_bytes: 每个要写的字段的字节数count                   |
 |          | int count : 要写的字段的个数                                 |
-|          | FILE* fp : 要写的文件指针                                    |
+|          | FILE\* fp : 要写的文件指针                                    |
 | 返回值   | int 成功，返回写的字段数；出错或文件结束，返回 0。           |
 
 `fwrite()`用来一次性写入较大的数据块，主要用途是将数组数据一次性写入文件，适合写入二进制数据。它的原型定义在`stdio.h`。
@@ -671,14 +671,14 @@ for (int i = 1; i <= 100; i++) {
 
 ## fread()
 
-| 函数声明 | int fread(void  *buffer,  int  num_bytes,  int count, FILE *fp) |
+| 函数声明 | int fread(void  \*buffer,  int  num_bytes,  int count, FILE \*fp) |
 | -------- | ------------------------------------------------------------ |
 | 所在文件 | stdio.h                                                      |
 | 函数功能 | 把fp 指向的文件中的数据读到 buffer 中。                      |
-| 参数     | char * buffer : 指向要读入数据存储区的首地址的指针           |
+| 参数     | char \* buffer : 指向要读入数据存储区的首地址的指针           |
 |          | int num_bytes: 每个要读的字段的字节数count                   |
 |          | int count : 要读的字段的个数                                 |
-|          | FILE* fp : 要读的文件指针                                    |
+|          | FILE\* fp : 要读的文件指针                                    |
 | 返回值   | int 成功，返回读的字段数；出错或文件结束，返回 0。           |
 
 `fread()`函数用于一次性从文件读取较大的数据块，主要用途是将文件内容读入一个数组，适合读取二进制数据。它的原型定义在头文件`stdio.h`。
