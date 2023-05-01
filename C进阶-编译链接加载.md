@@ -761,7 +761,21 @@ struct Elf32_Rel
 - 地址修正
 	- 重定位地址 = 新段基址 + 段内偏移
 
-# 程序的运行
+## 程序的安装
+
+程序的运行过程，其实就是处理器根据PC寄存器中的地址，从内存中不断取指令、翻译指令和执行指令的过程。内存RAM的优点是支持随机读写，因此可以支持CPU随机读取指令；内存的缺陷是RAM属于易失性存储器，一旦断电，内存中原先保存的数据都会消失。现代计算机的存储系统一般采用ROM+RAM的组合形式：ROM中存储的数据断电后不会消失，常用来保存程序的指令和数据，但ROM不支持随机存取，因此程序运行时，会首先将指令和数据从ROM加载到RAM，然后CPU到RAM中取指令就可以了。
+
+### 程序安装的本质
+
+软件安装的过程其实就是将一个可执行文件安装到ROM的过程。软件安装包里包含了可以在计算机上运行的可执行文件. 它将可执行文件、程序运行时需要的动态共享库、安装使用文档等打包压缩，生成可运行的自解压安装包格式。
+
+使用安装包安装软件就是将包中的可执行文件解压出来，然后将可执行文件和动态共享库复制到指定的安装目录，并把这些安装信息告诉操作系统。
+
+当用户要运行这个软件时，操作系统就会从安装目录找到这个可执行文件，把它加载到内存执行。
+
+在Linux环境下，我们一般将可执行文件直接复制到系统的官方路径/bin、/sbin、/usr/bin下，程序运行时直接从这些系统默认的路径下去查找可执行文件，将其加载到内存运行。
+
+## 程序的运行
 
 程序的运行分两种情况：
 - 操作系统环境下：可执行ELF文件运行
@@ -770,7 +784,7 @@ struct Elf32_Rel
 	- BIN/HEX文件是纯指令文件, 有其他杂七杂八的辅助信息
 - 原理是相通的: 都要将指令加载到`内存中的指定位置`. 而这个`指定位置`往往又与可执行文件链接时的`链接地址`有关.
 
-## 可执行ELF文件
+### 可执行ELF文件
 
 加载器:
 - 在操作系统环境下执行一个可执行文件, 首先会运行一个叫作加载器的程序, `加载器`会(根据软件的安装路径信息)首先将可执行文件加载到内存中
@@ -1125,9 +1139,9 @@ mymain
 至此，一个源程序经过编译、链接、安装、加载运行，并跳入我们自己编写的项目入口main()函数运行，整个流程已经分析完毕。
 
 
-# 链接静态库
+## 链接静态库
 
-## 静态库
+### 静态库
 
 - 归档文件: 目标文件归档
 - 制作静态库: `ar rcs libtest.a x.o xx.o`
@@ -1204,7 +1218,7 @@ gcc demo.c -L . -lcalc -o demo
 - -t：打印库中的目标文件。
 - -x：解压库中的目标文件。
 
-## 链接静态库带来的问题:
+### 链接静态库带来的问题:
 
 编译器是以`源文件为单位`编译程序的, 链接器在链接过程中逐个对目标文件进行分解组装. 
 
@@ -1233,7 +1247,7 @@ gcc demo.c -L . -lcalc -o demo
 
 静态链接还会产生另外一个问题. 如C标准库里的printf()函数, 可能多个程序都调用了它, 链接器在链接时就要将printf的指令添加到多个可执行文件中. 在一个多任务环境中, 当`多个进程并发`运行时, 你会发现内存中有大量重复的printf指令代码, 很浪费内存资源. 那么有没有解决的办法呢?肯定是有的, `动态链接`这时候就开始低调登场了. 
 
-# 动态链接
+## 动态链接
 
 静态链接的缺点
 - 生成的可执行文件体积较大, 包含相同的公共代码, 浪费存储空间, 运行时占用的内存较大
@@ -1311,7 +1325,7 @@ gcc demo.c -L . -lcalc -o demo
 
 如果有一种好方法, 将我们的动态库设计成无论放到哪里, 都可以执行, 而且可以被多个进程共享, 那么这个问题就迎刃而解了. 
 
-## 与地址无关的代码
+### 与地址无关的代码
 
 如果想让我们的动态库放到内存的任何位置都可以运行，都可以被多个进程共享，一种比较好的方法是将我们的动态库设计成`与地址无关的代码`。
 
@@ -1326,12 +1340,12 @@ gcc demo.c -L . -lcalc -o demo
 先把需要修改的部分放到一边，暂且不谈，我们先讨论动态库中与地址无关的代码部分.
 
 如何实现
-- 地址无关代码技术(PIC：position-independent code)
-- 编译：$ gcc -fPIC -c main.c
+- 地址无关代码技术(PIC: position-independent code)
+- 编译： `gcc -fPIC -c main.c`
 
-加上-fPIC参数生成的指令，实现了代码与地址无关，放到哪里都可以执行。
+加上-fPIC参数生成的指令, 实现了代码与地址无关, 放到哪里都可以执行. 
 
-## PIC底层技术支撑
+### PIC底层技术支撑
 
 实现PIC需要底层相关的技术支撑, 不同的平台有不同的实现方式. 
 
@@ -1356,7 +1370,7 @@ gcc demo.c -L . -lcalc -o demo
 		- GOT 和.data段放在一起.
 
 
-## 全局偏移表
+### 全局偏移表
 
 在动态库的设计中, 对于模块内的符号相互引用, 我们通过相对寻址很容易实现代码与地址无关. 
 
@@ -1472,7 +1486,7 @@ Symbol table of `.gnu.hash' for image:
 - 过程链接表无法单独工作，跟GOT是关联的
 - 当引用某个符号时，会从PLT表跳转到GOT表
 
-## 延迟绑定
+### 延迟绑定
 
 动态链接通过使用“与地址无关”这一技术, 加载到内存任意地址都可以运行. “与地址无关”这一技术在ARM平台可以使用相对寻址来实现. 
 
@@ -1524,3 +1538,520 @@ ARM相对寻址的本质其实就是寄存器间接寻址, 只不过基址换成
 	- 调用main()函数, 等main()函数运行结束时, 再根据main()函数的返回值做相应的处理; 负责main()函数运行结束后的清理工作. 
 	- C标准库其实就是以动态共享库的封装形式保存在Linux系统中的. 不同的应用程序都会调用printf() 函数, 当它们在内存中运行时, 只需要加载一份printf()函数代码到内存就可以了.
 	- 各个应用程序在引用printf这个符号时, 就会启动动态链接器, 将这份代码映射到各自进程的地址空间, 更新各自GOT表中printf()函数的实际地址, 然后通过查询GOT表找到printf()函数在内存中的实际地址, 就可通过间接访问跳转执行.
+
+## 共享库
+
+现在大多数软件都是采用动态链接的方式开发的，不仅可以节省内存空间，升级维护也比较方便。在发布软件包时，可执行文件及其依赖的动态链接共享库被一起打包发布.
+
+如果你依赖的是系统默认自带的共享库, 如C标准库, 则不需要跟软件一起打包. 
+
+当程序运行时, 动态链接器首先被加载到内存运行, 动态链接器会分析可执行文件, 从可执行文件的.dynamic段中查询该程序运行需要依赖的动态共享库, 然后到库的默认路径下查找这些共享库, 加载到内存中并进行动态链接, 链接成功后将CPU的控制权交给可执行程序, 我们的程序就可以正常运行了. 
+
+动态链接器在查找共享库的过程中, 除了到系统默认的路径(/lib, /usr/lib)下查找, 也会到用户指定的一些路径下去查找, 用户可以在/etc/ld.so.conf文件中添加自己的共享库路径. 为减少每次查找文件的时间消耗, /etc/ld.so.conf修改后, 我们也可以使用ldconfig命令生成一个缓存/etc/ld.so.chche以提高查找效率. 每当我们新增, 删除或修改共享库的路径时, 使用ldconfig更新一下缓存就可以了. 
+
+Linux环境下的共享库
+- 命名方式
+	- libname.so.x.y.z
+	- x：主版本号，表示库的重大升级、不同主版本号之间不兼容依赖旧版本的程序需要重新编译、才能运行
+	- y：次版本号，库的增量升级即增加一些新的接口符号，原来的接口符号不变，高版本向后兼容低版本
+	- z：发布版本号，一些错误修正、性能改进等，不增加新接口、原来接口保持不变
+
+软链接
+-  共享库的SO-NAME命令机制
+	- 用来记录共享库的依赖关系
+	- 每个共享库都有一个对应的SO-NAME, 去掉次, 发布版本号
+	- 系统会创建一个跟SO-NAME同名的软连接, 指向主版本号相同, 次版本号和发布版本号最新的共享库
+- 好处
+	- 依赖某个共享库的模块, 都使用SO-NAME, 不是详细的版本号, SO-NAME作为一个库的接口, 利于系统升级
+
+共享库的路径
+- 三个主要路径
+	- /lib: 存放系统最关键和基础的共享库, 如动态链接器, C库, 数学库等, 这些库主要是/bin, /sbin下程序运行, 以及系统启动所需要的库
+	- /usr/lib: 非系统运行所需要的关键性的共享库, 比如开发时用到的一些共享库, 这些库一般不会被用户的程序或者shell脚本用到
+	-  /usr/local/lib: 主要存放第三方应用程序所需要的一些库
+
+库的查找过程
+- 基本过程
+	- ELF文件执行, 动态链接器/lib/ld-linux-so.x被加载启动, 到.dynamic段里面寻找ELF文件依赖的共享库
+	- 若该路径是绝对路径, 直接到该绝对路径下面寻找
+	- 若该路径是相对路径, 到/lib, /usr/lib, /etc/ld.so.conf配置文件指定的目录去查找共享库. 
+- 库目录缓存
+	- ``/etc/ld.so.conf`存放共享库的路径, 为避免每次查找, 耗费时间, 可以使用ldconfig生成一个缓存`/etc/ld.so.cache`
+	- 新增, 删除或者更新共享库路径时, 执行`ldconfig` 更新缓存即可
+
+环境变量
+- LD_LIBRARY_PATH
+	- 由若干个路径组成的环境变量, 每个路径用冒号隔开
+	- 可以使用该变量临时改变程序依赖的共享库查找路径, 而不影响系统中的其它应用程序
+	- `export LD_LIBRARY_PATH=`
+
+有时候我们也可以使用LD_LIBRARY_PATH环境变量临时改变共享库的查找路径, 而不会影响系统中的其他应用程序. 我们可以将多个共享库的路径添加到这个环境变量中, 各个路径用冒号隔开. 
+
+> 前面8习，对程序的编译、链接、安装、运行和动态链接等基本流程有了一个系统的认识.
+
+## 插件的工作原理
+
+什么是插件?
+
+- 为了使软件方便扩展，具备通用性，可以采用插件机制:
+- 主程序的逻辑框架不变，各个具体的功能和业务以动态链接库形式加载进来
+- 好处是软件发布后，不用重新编译，通过插件形式更新功能、软件增值
+- 插件的本质是`共享库`，只不过组装形式比较复杂
+
+插件工作原理
+
+- 主程序框架引用的外部模块符号，运行时以动态链接库加载进来, 重定位, 就可以直接调用
+- 我们将这些功能模块实现，做成插件，实现动态加载，方便程序扩展
+- Linux提供了专门的系统调用接口，支持显式加载和引用动态链接库, 常用的系统调用API接下来介绍.
+
+### 显式加载动态库
+
+打开动态链接库
+
+- `void *dlopen (const char *filename, int flag);`
+- `void *Handle = dlopen (“./libct.so”, RTLD_LAZY);`
+- dlopen() 函数返回一个操作句柄, 我们通过这个句柄就可以操作显式加载到内存中的动态库
+- 函数的第一个参数是要打开的动态链接库, 第二个参数是打开标志位, 经常使用的标记位有如下几种:
+	- RTLD_LAZY：解析动态库遇到未定义符号不退出，仍继续使用
+	- RTLD_NOW：遇到未定义符号，立即退出
+	- RTLD_GLOBAL：允许导出符号，后面其它的动态库中可以引用
+
+获取动态对象地址
+
+- `void *dlsym (void *handle, char *symbol);`
+- 根据动态链接库句柄和要引用的符号, 返回符号对应的地址.
+- 一般要先定义一个符号类型的指针，保存该符号对应的地址.
+- 通过这个指针, 我们就可以引用动态库里的这个函数或全局变量了.
+- `void (* funcp) (int , int);`
+- `funcp = (void(*)(int, int )) dlsym(Handle , “myfunc”);`
+
+关闭动态链接库
+
+- `int dlclose (void *Handle);`
+- 该函数将共享库引用计数减一, 当引用计数为0时, 该共享库将会从系统中卸载
+
+动态库错误函数
+
+- `const char *dlerror (void);`
+- 当动态链接库操作函数失败，dlerror将返回出错信息；没有出错，则返回值为NULL
+- 系统调用头文件：`#include <dlfcn.h>`
+
+实验:
+```c
+//sub.c
+int add(int a, int b)
+{
+	return a+b;
+}
+int sub(int a, int b)
+{
+	return a-b;
+}
+
+//main.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <dlfcn.h>
+
+typedef int (*cac_func)(int, int);
+
+int main(void)
+{
+	void *handle;
+	cac_func fp = NULL;
+
+	handle = dlopen("./libtest.so", RTLD_LAZY);
+	if(!handle)
+	{
+		fprintf(stderr, "%s\n", dlerror());
+		exit(EXIT_FAILURE);
+	}
+
+	fp = dlsym(handle, "add");
+	if(fp)
+		printf("add:%d\n",fp(8,2));
+
+	fp = (cac_func) dlsym(handle, "sub");
+	if(fp)
+		printf("sub:%d\n",fp(8,2));
+
+	dlclode(handle);
+	exit(EXIT_SUCCESS);
+}
+```
+编译:
+```shell
+gcc sub.c -shared -fPIC -o libcac.so
+
+gcc main.c -o main -ldl
+```
+`dl*` 这些函数是以系统动态库的方式提供的, 所以要链接`dl库`. 
+如果要改动态库里的函数功能, 则只需要重新编译库代码, 主程序不需要动.
+
+## ubuntu安装qume-u-boot+linux+NFS
+
+- QEMU安装
+- 编译Linux内核, 模块和dtb文件
+- 使用busybox制作根文件系统
+- 使用u-boot加载Linux内核
+	- NOR/NAND flash启动
+	- 从SD卡启动
+	- Bootloader从网络加载Linux内核启动
+- U-boot编译
+- QEMU网络功能设置
+- 使用U-boot引导内核镜像
+	- 将内核编译为uImage格式
+	- 指定uImage的加载地址
+	- 编译时指定：$ make LOADADDR=0x60003000 uImage -j4
+- 主机TFTP工具安装
+	- 自动化引导
+- 挂载NFS文件系统
+	- 主机HOST支持NFS服务
+	- 修改bootargs启动参数
+		- 设置NFS为根文件系统
+		- 设置主机NFS文件系统的地址
+	- 内核支持挂载NFS文件系统
+- 主机HOST开启NFS服务
+- 修改bootargs启动参数
+- 内核支持挂载NFS文件系统
+- 完善根文件系统
+- 四个文件的启动流程
+	- Linux内核启动之后，挂载NFS根文件系统
+	- 开启Linux的第一个用户进程：init
+	- init进程bootargs->init=…->执行inittab脚本
+	- inittab脚本首先会执行init.d/rcS脚本
+	- rcS脚本:执行mount -a 读取fstab挂载各种文件系统
+	- inittab:接着会启动console
+		- 启动shell：/bin/sh
+		- 在启动/bin/sh之前先执行profile文件
+
+
+## Linux内核模块运行机制
+
+Linux内核实现了一个比较酷的功能: 支持模块的动态加载和运行. 如果你实现了一个内核模块并打算运行它, 你并不需要重启系统, 直接使用insmod命令加载即可, 这个模块就像“补丁”一样打进了Linux操作系统, 并可以正常运行. 
+
+一个最简单的内核模块源码如下:
+```c
+//helloworld.c
+
+#include<linux/init.h>
+#include<linux/module.h>
+ 
+MODULE_LICENSE("GPL");
+
+static int hello_init(void)
+{
+    printk("-----------------!\n");
+    printk("hello world!\n");
+    printk("-----------------!\n");
+    return 0;
+}
+  
+static void  __exit hello_exit(void)
+{
+    printk("-----------------!\n");
+    printk("Goodbye, cruel world!\n");
+    printk("-----------------!\n");
+}
+
+module_init(hello_init);
+module_exit(hello_exit);
+```
+
+```shell
+.PHONY:all clean
+ifneq ($(KERNELRELEASE),)
+obj-m := hello.o
+else
+
+KDIR := /home/linux-4.4.0
+all:
+	make CROSS_COMPILE=arm-linux-gnueabi- ARCH=arm -C $(KDIR) M=$(PWD) modules
+clean:
+	rm -fr .*.cmd *.ko *.o *.mod.o *.mod.c *.symvers *.order .*.ko .hello* .tmp_versions
+	rm -fr .*.cmd
+endif
+
+```
+
+上面的代码实现了一个最简单的内核模块: 一个helloworld.c文件和一个编译需要的Makefile. 在Linux环境下, 我们在命令行下进入存放这两个文件的目录, 直接make就可以编译生成内核模块hello.ko. 把hello.ko复制到ARM虚拟开发板平台Vexpress, 使用insmod命令就可以将hello.ko动态加载到内核运行.
+- ![](assets/Pasted%20image%2020230429211629.png)
+
+hello.ko内核模块的运行原理其实和共享库的运行机制一样, 都是在运行期间加载到内存, 然后进行一系列空间分配, 符号解析, 重定位等操作. hello.ko文件本质上和静态库, 动态库一样, 是一个可重定位的目标文件. 我们可以通过readelf命令查看这个目标文件的文件头信息. 
+- ![](assets/Pasted%20image%2020230429211656.png)
+
+模块加载实现
+
+- hello.ko和动态库的不同之处在于: 一个运行在内核空间, 一个运行在用户空间. 应用程序的运行依赖C标准库实现的动态链接器来完成动态链接过程; 
+- 而内核模块的运行不依赖C标准库, 动态链接, 重定位过程需要内核自己来完成: 模块的加载实现由系统调用`init_module`完成.
+- ![](assets/Pasted%20image%2020230429212537.png)
+	- 我们可以使用`strace insmod hello.ko` 来看这个过程都有哪些系统调用.
+
+当我们使用insmod命令加载一个内核模块时, 基本流程如下: 
+- 在源文件Kernel/module.c下的init_module
+- 拷贝到内核: copy_module_from_user
+	- 把hello.ko拷贝到内核空间
+- 接下来是`load_module` 函数:
+	- 地址空间分配: layout_and_allocate
+	- 符号解析: simplify_symbols
+	- 重定位: apply_relocations
+	- 执行：complete_formation
+
+内核模块与插件
+- 相同点
+	- 都是采用动态链接，在运行时加载到内存
+	- 空间分配, 符号解析, 重定位
+- 异同点
+	- 一个运行在内核空间, 一个运行在用户空间
+	- 内核模块不依赖C, 所以链接, 重定位过程自己完成
+	-  应用程序依赖于C标准库的ld链接器完成动态库链接
+
+## Linux内核编译和启动分析
+
+操作系统为应用程序提供了运行的进程环境和调度管理, 那么操作系统自身是如何运行和启动的呢? 有了前面的理论基础, 以Linux为例, 看看在一个嵌入式系统中Linux内核镜像是如何编译和运行的. 
+
+Linux内核启动
+- U-boot加载引导
+	- 支持TFTP、NAND、NOR、SD卡等启动方式
+	- U-boot使用bootm引导uImage
+	- 使用bootz引导zImage
+
+我们首先做一个Linux内核启动实验, 通过U-boot加载Linux内核镜像uImage到内存的不同位置, 观察Linux内核启动流程. 
+
+实验环境
+- 硬件环境: ARM vexpress A9虚拟开发板
+- RAM配置: 512M
+- RAM物理地址: 0x60000000 ~ 0x7FFFFFFF
+
+内核启动
+- 将uImage加载地址设置为0x60003000，编译生成uImage
+- 将内核加载到0x60003000地址, 然后bootm 0x60003000
+- 将内核加载到0x60004000地址, 然后bootm 0x60004000
+
+通过实验我们可以看到，虽然uImage被U-boot加载到了内存的0x60003000和0x60004000两个不同的地址，但是通过U-boot的bootm命令`都可以正常引导和运行`。
+bootm到底有什么魔法, 即使我们把镜像文件加载到了未指定的内存地址, 也能让Linux神奇般地启动起来呢?
+
+这事还得从Linux内核的编译链接说起, 我们以编译Linux内核镜像uImage的Log信息为切入点进行分析.
+
+```shell
+in ~/linux-4.19.282 at ubuntu …
+➜ make LOADADDR=0x60003000 uImage -j4
+scripts/kconfig/conf  --syncconfig Kconfig
+  CALL    scripts/checksyscalls.sh
+  CC      arch/arm/vfp/vfpmodule.o
+  CC      init/main.o
+  CC      arch/arm/mm/fault.o
+  CC      arch/arm/kernel/irq.o
+  AR      arch/arm/vfp/built-in.a
+  CC      arch/arm/common/firmware.o
+  CC      arch/arm/kernel/process.o
+  CC      arch/arm/mm/init.o
+  AR      arch/arm/common/built-in.a
+  CC      arch/arm/probes/decode-arm.o
+  CHK     include/generated/compile.h
+......
+  LD      vmlinux.o
+  MODPOST vmlinux.o
+  KSYM    .tmp_kallsyms1.o
+  KSYM    .tmp_kallsyms2.o
+  LD      vmlinux
+  SORTEX  vmlinux
+  SYSMAP  System.map
+  OBJCOPY arch/arm/boot/Image
+  Kernel: arch/arm/boot/Image is ready
+  GZIP    arch/arm/boot/compressed/piggy_data
+  AS      arch/arm/boot/compressed/piggy.o
+  LD      arch/arm/boot/compressed/vmlinux
+  OBJCOPY arch/arm/boot/zImage
+  Kernel: arch/arm/boot/zImage is ready
+  UIMAGE  arch/arm/boot/uImage
+Image Name:   Linux-4.19.282
+Created:      Mon May  1 14:29:12 2023
+Image Type:   ARM Linux Kernel Image (uncompressed)
+Data Size:    4204872 Bytes = 4106.32 KiB = 4.01 MiB
+Load Address: 60003000
+Entry Point:  60003000
+  Kernel: arch/arm/boot/uImage is ready
+```
+
+前面的打印信息比较简单, 就是分别使用编译器CC和汇编器AS将对应的.c文件和.S文件编译成.o格式的可重定位目标文件. 我们需要关注的核心过程在最后的链接和镜像文件的转换部分. 
+
+- 内核镜像编译过程
+	- ![](assets/Pasted%20image%2020230501143651.png)
+- 内核编译的几个关键地址
+	- ![](assets/Pasted%20image%2020230501150743.png)
+		- 注意, 运行Linux系统都需要mmu. 所以虚拟内存空间的划分有两种, 3G用户空间, 1G内核空间 与 2G内核空间, 2G 用户空间. vexpress就是2G 2G. 3G就是0xC000 0000, 2G的位置就是0x8000 0000.
+		- PAGE_OFFEST在编译内核的时候可以设置.
+			- ![](assets/Pasted%20image%2020230501174921.png)
+		- TEXT_OFFSET 是内核在物理地址中的偏移. 一般从0x8000开始放, 然后跟虚拟地址0x80008000进行映射.   Makefile中的地址定义:
+			- ![](assets/Pasted%20image%2020230501175620.png)
+			- ![](assets/Pasted%20image%2020230501175730.png)
+
+Linux内核镜像uImage的编译流程上面的流程图:
+- 编译器将所有的源文件编译成对应的目标文件后，接下来就是链接过程：将所有的目标文件链接成ELF格式的可执行文件vmlinux。
+	- ELF文件格式是Linux环境下的可执行文件格式，无论是GCC编译器还是arm-linux-gcc编译器，最终生成的都是ELF格式的文件。
+	- 在Linux环境下，加载器根据ELF文件里的地址信息，就可以将其加载到内存指定的地址运行的。
+	- Linux内核是在`裸机环境下启动`的, 在启动过程中并没有ELF文件的执行环境, 需要将ELF文件`转换为BIN/HEX格式的纯二进制指令文件`. 
+- 编译器会调用`objcopy`命令`删除vmlinux`可执行文件中`不必要的section,` 只保留代码段, 数据段等必要的section, 将ELF格式的vmlinux文件`转换为原始的二进制内核镜像Image`. 
+	- `OBJCOPY arch/arm/boot/Image`  编译打印的这一句就是.
+	- Image是纯指令文件，可以在裸机环境下运行，但自身体积比较大(一般几十兆以上).
+
+- 我们可以使用gzip工具对其进行压缩, 压缩成名为piggz.gzip的二进制内核镜像(一般大小为3MB)
+	- `GZIP  arch/arm/boot/compressed/piggy_data`
+	- `压缩处理的好处`是可以`提高程序的启动速度`. 因为内核加载运行时, 从Flash上读取镜像的速度是很慢的, 我们通过先压缩, 加载到内存后再解压这种操作, 不仅可以节省Flash的存储空间(尤其NorFlash还是很贵的), 还可以节省镜像的加载时间.
+
+- 因为piggz.gzip是压缩文件无法运行，所以我们还需要给它`链接上一段解压缩代码`. 链接器只能处理ELF格式的目标文件, 因此在链接之前, 要`先将压缩文件piggz.gzip转换为可重定位的目标文件: piggy.gzip.o`. 
+	- 在ARM平台下, 解压缩代码是由arch/arm/boot/compressed/目录下面的head.o、misc.o、decompress.o目标文件组成的.
+
+ - 这部分解压缩代码使用`-fpic参数`编译生成, 其特点是`与位置无关`, 放到哪里都可以执行, 它们通过链接器与piggy.gzip.o一起组装成`新的ELF文件vmlinux`, 然后使用`objcopy工具`将vmlinux转换为`纯二进制的镜像文件zImage,` zImage可以`直接烧写`到NOR Flash或NAND Flash上, 系统上电后加载到内存运行.  具体的打印就是下面几句:
+	- `AS    arch/arm/boot/compressed/piggy.o`
+	- `LD    arch/arm/boot/compressed/vmlinux`
+	- `OBJCOPY arch/arm/boot/zImage`
+	- `Kernel: arch/arm/boot/zImage is ready`
+
+- 不同的嵌入式平台可能会使用不同的BootLoader来加载Linux内核镜像的运行, 常见的BootLoader有U-boot, vivi, g-bios等. 
+- 使用`U-boot引导内核`的嵌入式平台通常会`对zImage进一步转换`, 给它`添加一个64字节的数据头`, 用来`记录镜像文件的加载地址`, `入口地址`, `文件大小`, `CPU架构`等信息. 
+- 我们可以使用U-boot提供的`mkimage工具`将`zImage镜像转换为uImage`. 
+	- 工具位于u-boot源码的tools目录下, 用来制作启动映像文件
+	- `mkimage -A arm -O linux -T kernel -C none -a 0x60003000 -e 0x60003000 -d zImage uImage`
+	- `UIMAGE  arch/arm/boot/uImage`
+	- mkimage常用的一些参数说明如下:
+		- -A：指定CPU架构类型。
+		- -O：指定操作系统类型。
+		- -T：指定image类型。
+		- -C：采用的压缩方式有none、gzip、bzip2等。
+		- -a：内核加载地址。
+		- -e：内核镜像入口地址。
+
+到这一步, U-boot可以引导的uImage内核镜像就生成了, 整个Linux内核镜像编译流程就结束了. 接下来我们继续分析U-boot是如何加载uImage运行的.
+
+> vmlinux(ELF) -> Image(bin) -> piggz.gzip -> piggz.gzip.o -> vmlinux(ELF) -> zImage -> uImage 
+
+U-boot的`bootm机制`:
+
+U-boot加载的dtb文件和bootargs这里暂不考虑，我们重点关注uImage. 
+- 在上面的实验中, 当uImage被加载到内存不同的地址时, 为什么都可以正常启动？我们先考虑图中的第一种情况, 当uImage加载到内存中的地址等于编译时指定的地址 0x60003000 时: 
+	- ![](assets/Pasted%20image%2020230501154429.png)
+
+- U-boot提供了bootm机制来启动内核的运行. bootm会解析uImage文件中64(0x40)字节的数据头, 解析出指定的加载地址, 并和自己的启动参数进行对比..
+- 若发现bootm参数地址和编译时-a指定的加载地址0x60003000相同, 就会直接跳过数据头, 直接跳到zImage的入口地址0x60003040执行, 如图:
+	- 加载到内存地址=指定地址
+	- ![](assets/Pasted%20image%2020230501155822.png)
+	- Bootm参数地址和-a指定加载地址:
+		- 不相同: 从参数地址提取头部, 将去掉头部的内核镜像zImage复制到-a指定的加载地址处, 然后执行
+		- 相同 : 代码不搬运, 直接到zImage入口地址执行
+
+- 如果bootm发现自己的参数地址和-a指定的加载地址0x60003000不同, 它会把去掉64字节数据头的内核镜像zImage`复制到`编译时-a指定的加载地址处, 然后跳到该地址执行. 
+	- 加载到内存地址!=指定地址
+	- ![](assets/Pasted%20image%2020230501160144.png)
+	- zImage镜像被加载到了编译时指定的0x60003000地址处, 然后跳过来, 就可以直接执行zImage了. 
+
+- 如前面介绍的, zImage是一个压缩文件, 在运行之前要先解压出真正要执行的内核镜像Image, 然后才能跳到内核镜像真正的入口处去启动Linux内核.
+	- zImage的构成:
+		- ![](assets/Pasted%20image%2020230501160344.png)
+	- `解压缩代码`head.o, decompress.o是一段与位置无关的代码, 将它们放到内存中的任何位置都可以运行.
+	- 有兴趣可以做一个实验, 使用`U-boot的bootz命令`直接引导内核镜像zImage运行. 将`zImage`加载到内存的不同地址, 你会发现zImage都可以正常启动. 
+
+- `解压缩代码的主要作用`就是从zImage文件中解压出`真正的内核镜像Image`(被压缩成piggz), 并将其`重定位`到编译Image时`指定的链接地址0x80008000`上. 
+- Linux内核运行使用的是`虚拟地址`, 需要CPU硬件管理单元MMU的支持, MMU会将虚拟地址转换为对应的物理地址. 
+	- zImage解压缩
+		- ![](assets/Pasted%20image%2020230501161414.png)
+	- 在ARM vexpress平台上, 内核的链接地址0x80008000会映射到物理内存0x60008000这个地方. zImage的解压缩代码会将Image解压到内存0x60008000处, 解压成功后跳过去就可以直接启动Linux内核了. 
+
+- `zImage`在解压缩过程中可能会遇到这么一种情况: `zImage`自身刚好占据了0x60008000这片地址空间, 那么当`zImage`的解压缩代码将解压出来的`Image`重定位到指定的地址0x60008000处时, 可能会覆盖掉自身正在运行的解压缩代码.
+- 为了避免这种情况发生, 如图所示, `zImage`会将这部分解压缩和重定位代码复制到一个安全的地方, 如`Image`的后面, 然后跳到这片`重定位代码处`执行, 这样就可以将`Image`镜像安全地复制到0x60008000地址上了.
+	- 代码重定位: 
+		- ![](assets/Pasted%20image%2020230501161933.png)
+	- 复制成功后，就可以直接跳到内存的0x60008000地址去运行Linux, 内核真正的代码了。因为Image镜像链接时使用的是虚拟地址，所以在运行Linux内核的C语言函数之前，首先会运行一段汇编代码来初始化堆栈环境，使能MMU。
+		- 启动流程的代码跟踪就不具体分析:
+			- 运行入口：`arch/arm/kernel/head.S`.
+			- 使能MMU：`__create_page_tables()`.
+			- 跳入C语言函数：`__mmap_switched/start_kernel()`.
+
+## 常用的binutils工具集
+
+在本章的学习中，为了查看和分析目标文件、可执行文件的内部组成，我们使用了很多命令，如objdump、readelf等。这些命令都是编译器提供的，如GNU C编译器套件，不仅包含程序编译时使用的编译器、链接器，还会提供一系列工具，这些工具被称为GNU工具集：binutils  tools。GNU工具集主要用来协助程序的编译、链接、调试过程，支持不同格式的文件相互转换，以及针对特定的处理器做优化等。
+
+### 编译器与binutils的关系
+
+- GNU编译器
+	- GCC编译器
+	- GNU工具集：binutils tools
+- GNU工具集
+	- 协助软件的编译、链接
+	- 不同文件格式的转换
+	- 针对特定处理器的一些处理
+
+### 常用binutils工具
+
+- ![](assets/Pasted%20image%2020230501195835.png)
+- ![](assets/Pasted%20image%2020230501195847.png)
+- readelf命令
+	- readelf是我们比较常用的命令，主要用来查看二进制文件的各个section信息。
+	- ![](assets/Pasted%20image%2020230501200317.png)
+- objdump用法
+	- objdump主要用来反汇编，将可执行文件的二进制指令反汇编成汇编文件.
+	- ![](assets/Pasted%20image%2020230501200353.png)
+- objcopy用法
+	- 主要用途：拷贝一个目标文件的内容到另一个目标文件中、目标文件格式转换.
+	- ![](assets/Pasted%20image%2020230501200427.png)
+
+- 使用示例
+	- ELF文件转换为BIN文件
+		- `arm-linux-gnueabi-objcopy -O binary -R .comment -S uboot uboot.bin`
+			- -O binary：输出为原始的二进制文件
+			- -R .comment：删除不需要的section .comment
+			- -S：重定位、符号等信息不要输出到目标文件uboot.bin中
+	- BIN文件转换为HEX文件
+		- `objcopy -I binary -O ihex uboot.bin uboot.hex`
+	- 文件“瘦身”
+		- 将目标文件中不需要的信息去掉
+		- `objcopy -R .comment a.out`
+
+## U-boot重定位分析
+
+在嵌入式系统中, 经常会使用U-boot来引导Linux内核启动. U-boot比较有意思, 不仅充当“加载器”的角色, 引导Linux内核镜像运行, 还充当了“链接器”的角色, 完成自身代码的复制及重定位. 那么U-boot到底是如何做到这些的呢? U-boot是如何启动的呢? 谁又来引导U-boot运行的呢? 
+
+### U-boot启动方式
+
+大家可能在很多资料中都看到, 说U-boot是系统上电后运行的第一行代码. 这句话其实是错误的, U-boot并不是系统上电后运行的第一行代码. 现在的ARM SoC一般会在芯片内部集成一块ROM, 在ROM上会固化一段启动代码, 如图所示: 
+- ![](assets/Pasted%20image%2020230501211212.png)
+
+系统上电后, 会首先运行固化在芯片内部的ROM中的ROMCODE代码. 这部分代码的主要工作就是初始化存储接口, 建立存储映射, 它会根据CPU外部管脚或eFuse值来判断系统的启动方式.
+
+一个嵌入式系统通常支持多种启动方式, 如NOR Flash, NAND Flash或者从SD卡启动. 
+
+如果我们设置系统从NOR Flash启动, 那么这段代码就会将NOR Flash映射到零地址, 然后系统复位, CPU跳到U-boot中断向量表中的第一行代码, 即NOR Flash中的第一行代码去执行. 
+
+们也可以设置系统从NAND Flash或SD卡启动. 我们知道除了`SDRAM`和`NOR Flash`支持随机读写, 可以`直接运行代码`, 其他Flash存储器是不支持直接运行代码的, 只能将代码复制到内存中执行. 
+
+因为此时系统刚上电, 内存还没有初始化, 所以系统一般会先将`NAND Flash`或`SD卡`中的一部分代码(前4KB)`复制到`芯片内部的`SRAM中`去执行, 映射SRAM到零地址, 然后在这4KB代码中进行各种初始化, 代码复制, 重定位等工作, 最后PC指针才跳到SDRAM内存中去执行代码. 
+
+在一个嵌入式系统中, 无论采用哪种启动方式, 为提高运行效率, U-boot在启动过程中, 都会将存储在ROM上的自身`代码复制到内存中重定位`, 然后跳转到`内存SDRAM中`去执行. 
+
+- ![](assets/Pasted%20image%2020230501212246.png)
+
+那么U-boot是如何完成自身代码的复制及重定位的呢？
+
+接下来我们就以U-boot的启动流程为切入点来分析U-boot的重定位过程. 以ARM的vexpress-A9平台进行分析, 使用U-boot. 想要分析U-boot的启动流程, 我们还得溯本求源, 从U-boot的编译过程开始分析. 
+
+### U-boot编译过程
+
+我们可以从Makefile和链接脚本U-boot.lds来分析U-boot可执行文件的生成过程. 通过Makefile, 我们可以分析出U-boot启动过程中涉及的几个文件: start.S, crt0.S, relocate.S. 参考U-boot.lds链接脚本, 我们可以看到U-boot可执行文件中各个section的组装顺序及U-boot的链接过程. 
+
+- ![](assets/Pasted%20image%2020230501212614.png)
+	- uboot因为要在裸机环境执行, 所以最后要把elf变为.bin纯二进制文件. elf中其他的section都被分离出来了. .sym就是放符号的地方.
+	- -nodtb 是内核3.0之后为了管理杂乱的外设而设计的名为设备树的机制. 可让内核精简, 干净. 下面是uboot编译过程Makefile打印.
+	- ![](assets/Pasted%20image%2020230501221931.png)
+		- 编译, 链接, objcopy.  Makefile 依赖:
+		- ![](assets/Pasted%20image%2020230501222358.png)
+
+U-boot镜像依赖关系
+- ![](assets/Pasted%20image%2020230501221024.png)
+
+U-boot在系统上电后的启动过程中会涉及下面几个文件: 
+
+- `arch/arm/lib/vector.S: b reset -> reset`.
+- `arch/arm/cpu/armv7/start.S: reset -> _main`.
+- `arch/arm/lib/crt0.S: main -> relocate_code`
+- `arch/arm/lib/relocate.S: relocate_code`
