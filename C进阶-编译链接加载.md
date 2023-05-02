@@ -2055,3 +2055,133 @@ U-boot在系统上电后的启动过程中会涉及下面几个文件:
 - `arch/arm/cpu/armv7/start.S: reset -> _main`.
 - `arch/arm/lib/crt0.S: main -> relocate_code`
 - `arch/arm/lib/relocate.S: relocate_code`
+
+系统上电复位, ARM`首先会跳到中断向量表执行复位程序`, reset复位程序定义在`start.S汇编`文件中，PC指针会跳转到start.S文件执行该程序. 系统上电复位程序主要执行下列操作. 
+- 设置CPU为SVC模式.
+- 关闭Cache, 关闭MMU。
+- 设置看门狗、屏蔽中断、设置时钟、初始化SDRAM.
+
+reset复位程序会调用不同的子程序完成各种初始化, 不同的子程序在不同的文件中定义. reset最后会跳到crt0.S中的`_main`汇编子程序执行. `_main`的核心汇编代码如下. 
+```asm
+/*
+ * entry point of crt0 sequence
+ */
+
+ENTRY(_main)
+
+/* Call arch_very_early_init before initializing C runtime environment. */
+#if CONFIG_IS_ENABLED(ARCH_VERY_EARLY_INIT)
+	bl	arch_very_early_init
+#endif
+
+/*
+ * Set up initial C runtime environment and call board_init_f(0).
+ */
+
+#if defined(CONFIG_TPL_BUILD) && defined(CONFIG_TPL_NEEDS_SEPARATE_STACK)
+	ldr	r0, =(CONFIG_TPL_STACK)
+#elif defined(CONFIG_SPL_BUILD) && defined(CONFIG_SPL_STACK)
+	ldr	r0, =(CONFIG_SPL_STACK)
+#else
+	ldr	r0, =(SYS_INIT_SP_ADDR)
+#endif
+	bic	r0, r0, #7	/* 8-byte alignment for ABI compliance */
+	mov	sp, r0
+	bl	board_init_f_alloc_reserve
+	mov	sp, r0
+	/* set up gd here, outside any C code */
+	mov	r9, r0
+	bl	board_init_f_init_reserve
+
+#if defined(CONFIG_DEBUG_UART) && CONFIG_IS_ENABLED(SERIAL)
+	bl	debug_uart_init
+#endif
+
+#if defined(CONFIG_SPL_BUILD) && defined(CONFIG_SPL_EARLY_BSS)
+	CLEAR_BSS
+#endif
+
+	mov	r0, #0
+	bl	board_init_f
+```
+
+在crt0.S 的`_main`中主要执行以下操作:
+- 初始化C语言运行环境, 堆栈设置. 
+- 各种板级设备初始化, 初始化NAND Flash, SDRAM. 
+- 初始化全局结构体变量GD, 在GD里有U-boot实际加载地址. 
+- 调用relocate_code, 将U-boot镜像从Flash复制到RAM.
+- 从Flash跳到内存RAM中继续执行程序.
+- BSS段清零, 跳入`bootcmd`或`main_loop`交互模式.
+
+### 代码重定位
+
+启动过程中最关键的一步, 也是比较难理解的一步就是调用relocate_code实现代码的复制与重定位操作. U-boot是如何将自身代码从Flash复制到RAM中的? U-boot自身是如何从Flash跳到RAM中的? 带着这些疑问, 我们从relocate_code这段汇编代码慢慢分析. 
+
+relocate_code在relocate.S汇编文件中定义, 它会`首先将U-boot自身的代码段, 数据段从Flash复制到RAM`, 然后`根据重定向符号表, 对内存中的代码进行重定位`. 接下来我们要思考的问题是, relocate_code要将U-boot复制到内存的哪个地址呢? 如何重定位?
+
+先解决第一个问题：U-boot会被内核镜像复制到内存中的什么地址。
+
+旧版本的U-boot一般默认链接地址等于加载地址, 而新版本的U-boot则采取不同的操作. 
+`无论编译时的链接地址`是多少, U-boot可以`根据硬件平台实际RAM的大小灵活设置加载地址`, 并保存在全局数据`gd->relocaddr`中. 通过这种方式可以更大程度地`适配不同大小的内存配置`, 不同的启动方式和不同的链接地址. 
+
+`内核镜像`一般会加载到`内存的低端地址`, `U-boot`一般被加载到`内存的高端地址`, 这样做, 一是防止U-boot在复制内核镜像到内存时覆盖掉自己, 二是U-boot可以一直驻留在内存中, 当我们使用reboot软重启Linux系统时, 还可以回跳到U-boot执行. 在relocate_code中, 可以看到复制镜像的核心代码.
+
+- ![](assets/Pasted%20image%2020230502163017.png)
+- ![](assets/Pasted%20image%2020230502163022.png)
+
+U-boot分别使用两个零长度数组`__image_copy_start`和`__image_copy_end`来标记U-boot中要复制到内存中的指令代码段. 在复制之前, 要判断链接地址`__image_copy_start`和保存在R0中的实际加载地址`gd->relocaddr`是否相等, 如果相等, 则跳过复制过程. 
+
+`__image_copy_start`在链接脚本U-boot.lds中的位置如下:
+- ![](assets/Pasted%20image%2020230502163307.png)
+
+将U-boot复制到内存后, 需要对其重定位, 然后才能跳到RAM中运行.
+
+`旧版本的U-boot`在进行重定位之前, 会进行判断: 当前运行地址是否等于链接地址, 如果两者地址相同或者直接从SDRAM启动, 则不需要重定位. 新版本的U-boot无论采用哪种启动方式都需要重定位. 
+
+不同版本u-boot重定位(小结)
+- 旧版本u-boot重定位
+	- 旧版本重定位判断：当前运行地址`==`链接地址？
+	- 如果直接从SDRAM启动，则不需要重定位
+- 新版本重定位
+	- 都需要重定位
+	- 根据SDRAM自动计算出加载地址：实际加载地址`==`链接地址？
+	- 更大程度适配不同硬件平台、启动方式、链接地址
+
+如何自动计算加载地址?
+- 全局数据GD: global data
+	- 实际加载地址: gd->relocaddr
+	- ![](assets/Pasted%20image%2020230502164638.png)
+
+U-boot启动前期为什么可以直接在0x0起始地址运行？
+- 动态链接
+
+动态链接
+
+通过前面的学习我们已经知道, 动态链接库为了让多个进程共享, 使用了`-fpic参数`编译, 生成了`与位置无关的代码+GOT表`的形式: 
+- 与位置无关的代码采用`相对寻址`, 无论加载到内存中的任何地方都可以运行; ARM LDR伪指令.
+- `GOT表放到数据段`中, 位置是固定不变的, 当程序要访问动态库中的绝地地址符号时, 可先通过相对寻址跳到GOT表中查找该符号的真实地址, 然后跳过去执行即可. 
+- 动态库重定位时只需要根据加载到内存中的实际地址修改GOT表就可以了, 其他代码不需要修改. 
+
+U-boot的重定位操作和动态链接库类似:
+采用`与地址无关代码+符号表的形式来完成重定位操作`: 符号表中保存的是代码中引用的绝对符号地址, 如全局变量的地址, 函数的地址等. 符号表紧挨着代码段, 位置在编译时就已经固定死了, 程序访问全局变量时, 可先通过相对寻址跳到符号表, 在符号表中找到变量的真实地址, 然后就可以直接访问变量了. 
+
+U-boot采用的动态链接:
+- 位置无关代码 + 符号表 +重定位符号表
+- 基址重置：R_ARM_RELATIVE
+
+为了简化分析, 我们假设U-boot编译时以0x1000为链接起始地址, 实际运行的加载地址为0x3000, 代码中引用了3个全局变量符号: i、j、k，这3个全局变量被保存在数据段中.
+
+编译生成的U-boot ELF文件如图所示, 代码段起始地址为0x1000, 数据段的起始地址为0x1500. 代码段中引用了全局变量符号, 将这些符号的地址放置在代码段后面的符号表中, 符号表紧挨着代码段, 符号表的起始地址为0x1100. 
+- ![](assets/Pasted%20image%2020230502171424.png)
+
+U-boot文件中还有一个重定位符号表.rel.dyn, 每一项占两个字大小, 采用`地址+R_ARM_RELATIVE`的形式, 记录符号表中每一个符号(i, j, k)在符号表中的位置. 可重定位符号表的起始地址为0x1800, 我们可以通过readelf命令查看其信息. 
+- ![](assets/Pasted%20image%2020230502171524.png)
+
+U-boot在启动过程中, 调用relocate_code将自身镜像复制到内存的0x3000地址处, 此时内存中的代码段起始地址就变成了0x3000, 数据段中全局变量i的地址也从0x1500变成了0x3500. 此时如果PC指针直接跳到内存执行, 试图访问全局变量i就会失败, 因为当它通过相对寻址跳到符号表的0x3100地址处查找变量i的地址时, 发现i的地址仍为1500.
+将U-boot镜像加载到内存后, 各个段的地址变化如图所示: 
+- ![](assets/Pasted%20image%2020230502171754.png)
+
+代码搬移导致全局符号的地址也发生了偏移, 但是符号表中的这些地址仍是以前的老地址, 我们需要进行重定位操作: 刷新符号表中这些符号的真实地址就可以了. 在重定位符号表.rel.dyn中记录每一个需要重定位符号的地址, 根据这些信息, 我们就可以一个一个地更新符号表中的所有符号(全局变量i, j, k在内存中的真实地址). 重定位前后, 符号表中的变化如图所示:
+- ![](assets/Pasted%20image%2020230502171909.png)
+
+
