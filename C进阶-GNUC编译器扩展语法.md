@@ -3,7 +3,7 @@
 - ![](assets/Pasted%20image%2020230504175603.png)
 - ![](assets/Pasted%20image%2020230504175613.png)
 
-这些就是GNU C的扩展语法.
+这些就是GNU C的扩展语法.  这篇内容主要是为了看懂linux 内核代码.
 
 # C语言标准和编译器
 
@@ -466,7 +466,7 @@ offsetof宏 将0强制转换为一个指向TYPE类型的结构体常量指针, �
 
 结束.
 
-## 零长度数组
+# 零长度数组
 
 零长度数组, 变长数组都是GNU C编译器支持的数组类型.  顾名思义, 零长度数组就是长度为0的数组.
 
@@ -531,7 +531,7 @@ int main()
 }
 ```
 
-内核中的零长度数组
+### 内核中的零长度数组
 
 零长度数组在内核中一般以变长结构体的形式出现. 我们就分析一下变长结构体内核USB驱动中的应用. 在网卡驱动中, 大家可能都比较熟悉一个名字: 套接字缓冲区, 即Socket Buffer, 用来传输网络数据包. 同样, 在USB驱动中, 也有一个类似的东西, 叫作URB, 其全名为`USB Request Block`, 即USB请求块, 用来传输USB数据包. 
 - include/linux/usb.h:
@@ -621,7 +621,7 @@ kmalloc是内核中的内存申请接口.
 	- 看符号表就可以知道, array2 长度0, 但是有地址0x21054. 在BSS段的后面. array2符号表示的默认地址是一片未使用的内存空间, 仅此而已, 编译器绝不会单独再给其分配一个存储空间来存储数组名. 
 
 
-## 属性声明: section
+# 属性声明: section
 
 >GNU C编译器扩展关键字：`__attribute__`
 
@@ -657,7 +657,7 @@ aligned和packed用来显式指定一个变量的存储对齐方式。在正常�
 - 这里还有一个细节，就是属性声明要紧挨着变量，上面的三种声明方式都是没有问题的，但下面的声明方式在编译的时候可能就通不过。
 	- ![](assets/Pasted%20image%2020230504225515.png)
 
->属性声明：section
+## 属性声明：section
 
 我们可以使用`__attribute__`来声明一个`section属性`, section属性的主要作用是: 在程序编译时，将一个函数或变量放到指定的段, 即放到指定的section中. 
 
@@ -702,7 +702,7 @@ readelf -s  section | grep global
 
 ```
 
-我们给函数
+我们给函数也放到指定的section.
 ```c
 #include <stdio.h>
 
@@ -744,7 +744,7 @@ readelf -S  section | grep 15
 [15] test2             PROGBITS         00000000000011b5  000011b5
 ```
 
->Linux内核驱动中的`__init`宏
+## Linux内核驱动中的`__init`宏
 
 linux 内核中有些函数, 只需要在初始化的时候执行一次, 后面基本就不用了. 如果不做特殊处理, 这些函数就浪费资源. 只用一次, 就不用了, 还占用资源的话就不合适. 
 
@@ -827,3 +827,1018 @@ unsigned long free_reserved_area(void *start, void *end, int poison, char *s)
 }
 EXPORT_SYMBOL(free_reserved_area);
 ```
+
+## U-boot镜像自复制分析
+
+U-boot一般存储在NOR Flash或NAND Flash上. 无论从NOR Flash还是从NAND Flash启动, U-boot其本身在启动过程中, 都会从Flash存储介质上加载自身代码到内存, 然后进行重定位, 跳到内存RAM中去执行. U-boot是怎么完成代码自复制的呢? 或者说它是怎样将自身代码从Flash复制到内存的呢? 
+
+在复制自身代码的过程中, 一个主要的疑问就是: U-boot是如何识别自身代码的? 是如何知道从哪里开始复制代码的? 是如何知道复制到哪里停止的? 这个时候我们不得不说起U-boot源码中的一个零长度数组. 
+
+```c
+#define __section(S)      __attribute__((__section__(S)))
+//sections.c
+char __image_copy_start[0] __section(".__image_copy_start");
+char __image_copy_end[0] __section(".__image_copy_end");
+```
+这两行代码的作用是分别定义一个零长度数组，并指示编译器要分别放在`.__image_copy_start`和`.__image_copy_end`这两个section中。
+
+其实就分别代表了U-boot镜像要复制自身镜像的起始地址和结束地址. 无论U-boot自身镜像存储在NOR Flash, 还是存储在NAND Flash上, 只要知道了这两个地址, 我们就可以直接调用相关代码复制. 
+
+链接器在链接各个目标文件时, 会按照链接脚本里各个section的排列顺序, 将各个section组装成一个可执行文件. U-boot的链接脚本U-boot.lds在U-boot源码的根目录下面: 
+uboot的链接脚本: 
+```shell
+OUTPUT_FORMAT("elf32-littlearm", "elf32-littlearm", "elf32-littlearm")
+OUTPUT_ARCH(arm)
+ENTRY(_start)
+SECTIONS
+{
+ . = 0x00000000;
+ . = ALIGN(4);
+ .text :
+ {
+  *(.__image_copy_start)
+  *(.vectors)
+  arch/arm/cpu/armv7/start.o (.text*)
+ }
+ .__efi_runtime_start : {
+  *(.__efi_runtime_start)
+ }
+
+ .text_rest :
+ {
+  *(.text*)
+ }
+ . = ALIGN(4);
+ .rodata : { *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.rodata*))) }
+ . = ALIGN(4);
+ .data : {
+  *(.data*)
+ }
+ . = ALIGN(4);
+ . = .;
+ . = ALIGN(4);
+ __u_boot_list : {
+  KEEP(*(SORT(__u_boot_list*)));
+ }
+ . = ALIGN(4);
+ .efi_runtime_rel_start :
+ {
+  *(.__efi_runtime_rel_start)
+ }
+ .efi_runtime_rel : {
+  *(.rel*.efi_runtime)
+  *(.rel*.efi_runtime.*)
+ }
+ .efi_runtime_rel_stop :
+ {
+  *(.__efi_runtime_rel_stop)
+ }
+ . = ALIGN(4);
+ .image_copy_end :
+ {
+  *(.__image_copy_end)
+ }
+ .rel_dyn_start :
+ {
+  *(.__rel_dyn_start)
+ }
+ .rel.dyn : {
+  *(.rel*)
+ }
+ .rel_dyn_end :
+ {
+  *(.__rel_dyn_end)
+ }
+ .end :
+ {
+  *(.__end)
+ }
+ _image_binary_end = .;
+ . = ALIGN(4096);
+ .mmutable : {
+  *(.mmutable)
+ }
+ .bss_start __rel_dyn_start (OVERLAY) : {
+  KEEP(*(.__bss_start));
+  __bss_base = .;
+ }
+ .bss __bss_base (OVERLAY) : {
+  *(.bss*)
+   . = ALIGN(4);
+   __bss_limit = .;
+ }
+ .bss_end __bss_limit (OVERLAY) : {
+  KEEP(*(.__bss_end));
+ }
+}
+```
+
+通过链接脚本我们可以看到, `__image_copy_start`和`__image_copy_end`这两个section, 在链接的时候分别放在了代码段.text的前面, 数据段.data的后面, 作为U-boot复制自身代码的起始地址和结束地址. 而在这两个section中, 我们除了放两个零长度数组, 并没有放其他变量. 
+
+在arch/arm/lib/relocate.S中, ENTRY(relocate_code)汇编代码主要完成代码复制的功能.
+- ![](assets/Pasted%20image%2020230504235725.png)
+- 在这段汇编代码中, 寄存器R1, R2分别表示要复制镜像的起始地址和结束地址, R0表示要复制到RAM中的地址, R4存放的是源地址和目的地址之间的偏移, 在后面重定位过程中会用到这个偏移值. 在汇编代码中: `ldr r1, =__image_copy_start`
+- 通过ARM的LDR伪指令, 直接获取要复制镜像的首地址, 并保存在R1寄存器中. 数组名本身其实就代表一个地址, 通过这种方式, U-boot在嵌入式启动的初始阶段, 就完成了自身代码的复制工作: 从Flash复制自身镜像到内存中, 然后进行重定位, 最后跳到内存中执行. 
+
+# 属性声明: aligned
+
+## 地址对齐: aligned
+
+GNU C通过`__attribute__`来声明aligned和packed属性, 指定一个变量或类型的对齐方式. 
+
+这两个属性用来告诉编译器: 
+在给变量分配存储空间时, 要按指定的地址对齐方式给变量分配地址. 如果你想定义一个变量, 在内存中以8字节地址对齐, 就可以这样定义:
+- `__attribute__((aligned(8))) int a;`
+- `int a __attribute__((aligned(8)));`
+- `int a __attribute__((aligned(8))) = 1;`
+- 错误示范: `int a = 1 __attribute__((aligned(8)));`
+	- 通过aligned属性, 可以显式地指定变量a在内存中的地址对齐方式. aligned有一个参数, 表示要按几字节对齐, 使用时要注意, 地址对齐的字节数`必须是2的幂次方`, 否则编译就会出错.
+
+一般情况下, 当我们定义一个变量时, 编译器会按照默认的地址对齐方式, 来给该变量分配一个存储空间地址. 如果该变量是一个int型数据, 那么编译器就会按4字节或4字节的整数倍地址对齐; 如果该变量是一个short型数据, 那么编译器就会按2字节或2字节的整数倍地址对齐; 如果是一个char类型的变量, 那么编译器就会按照1字节地址对齐. 
+```c
+#include <stdio.h>
+
+int a = 1, b = 2;
+char c1 = 3, c2 = 4;
+
+int main (int argc, char *argv[])
+{
+    printf("a: %p\n",&a); 
+    printf("b: %p\n",&b); 
+    printf("c1: %p\n",&c1); 
+    printf("c2: %p\n",&c2); 
+    return 0;
+}
+```
+运行打印如下:
+```shell
+./aligned
+a: 0x559f1a3fe010
+b: 0x559f1a3fe014
+c1: 0x559f1a3fe018
+c2: 0x559f1a3fe019
+```
+
+接下来，我们修改一下程序，指定变量c2按4字节对齐:
+```c
+int a = 1, b = 2;
+char c1 = 3;
+__attribute__((aligned(4))) char c2 = 4;
+
+int main (int argc, char *argv[])
+{
+    printf("a: %p\n",&a); 
+    printf("b: %p\n",&b); 
+    printf("c1: %p\n",&c1); 
+    printf("c2: %p\n",&c2); 
+    return 0;
+}
+```
+打印:
+```shell
+a: 0x55e8e3ad9010
+b: 0x55e8e3ad9014
+c1: 0x55e8e3ad9018
+c2: 0x55e8e3ad901c
+```
+c1, c2 间隔了4个字节, c2的地址为1c, 能被4整除. 
+编译器不再分配019结尾的地址, 而是空了3个字节. 在01c结尾的地址分配.
+
+通过aligned属性声明, 虽然可以显式地指定变量的地址对齐方式, 但是也会因边界对齐造成一定的内存空置, 浪费内存资源.
+
+既然地址对齐会造成一定的内存空洞，那么我们为什么还要按照这种对齐方式去存储数据呢？
+- 一个主要原因就是：这种对齐设置可以简化CPU和内存RAM之间的接口和硬件设计
+- 减少访存次数.
+
+一个32位的计算机系统, 在CPU读取内存时, 硬件设计上可能只支持4字节或4字节倍数对齐的地址访问, CPU每次向内存RAM读写数据时, 一个周期可以读写4字节. 如果我们把一个int型数据放在4字节对齐的地址上, 那么CPU一次就可以把数据读写完毕; 如果我们把一个int型数据放在一个非4字节对齐的地址上, 那么CPU可能就要分两次才能把这个4字节大小的数据读写完毕. 
+
+为了配合计算机的硬件设计, 编译器在编译程序时, 对于一些基本数据类型, 如int, char, short, float等, 会按照其数据类型的大小进行地址对齐, 按照这种地址对齐方式分配的存储地址, CPU一次就可以读写完毕. 虽然边界对齐会造成一些内存空洞, 浪费一些内存单元, 但是在硬件上的设计却大大简化了. 这也是编译器给我们定义的变量分配地址时, 不同类型的变量按照不同字节数地址对齐的主要原因. 
+
+除了int, char, short, float这些基本类型数据, 对于一些复合类型数据, 也要满足地址对齐要求. 
+
+## 结构体的对齐
+
+结构体作为一种复合数据类型, 编译器在给一个结构体变量分配存储空间时, 不仅要考虑结构体内各个基本成员的地址对齐, 还要考虑结构体整体的对齐. 
+
+为了结构体内各个成员地址对齐, 编译器可能会在结构体内填充一些空间; 为了结构体整体对齐, 编译器可能会在结构体的末尾填充一些空间. 
+
+```c
+typedef struct st{
+    char a;
+    int b;
+    short c;
+}data;
+int main (int argc, char *argv[])
+{
+    data s;
+    printf("size: %zd\n",sizeof(s)); 
+    printf("a: %p\n",&s.a); 
+    printf("b: %p\n",&s.b); 
+    printf("c: %p\n",&s.c); 
+    return 0;
+}
+```
+```shell
+打印如下:
+size: 12
+a: 0x7ffcd94d25dc
+b: 0x7ffcd94d25e0
+c: 0x7ffcd94d25e4
+```
+成员b 为4字节对齐, 编译器给a分配完地址, 空3个字节, 给b分配.
+
+根据结构体的对齐规则, 结构体的整体对齐要按结构体所有成员中最大对齐字节数或其整数倍对齐, 或者说结构体的整体长度要为其最大成员字节数的整数倍, 如果不是整数倍则要补齐. 
+
+该结构体中, 成员最大对齐字节是4字节. 所以 short型后面要补2个字节. 一共是12个字节.
+
+结构体成员按不同的顺序排放, 可能会导致结构体的整体长度不一样, 我们修改一下上面的程序. 
+```c
+typedef struct st{
+    char a;
+    short b;
+    int c;
+}data;
+```
+打印:
+```shell
+size: 8
+a: 0x7ffed1a00150
+b: 0x7ffed1a00152
+c: 0x7ffed1a00154
+```
+short b按2字节对齐, 所以分配到的地址是152结尾. int c是4字节对齐, 地址是154结尾.
+整体是2+2+4是8个字节.
+
+现在我们手动修改, 让short b按4字节对齐.
+```c
+typedef struct st{
+    char a;
+    short b __attribute__((aligned(4)));
+    int c;
+}data;
+```
+
+打印:
+```shell
+size: 12
+a: 0x7ffe4cd4501c
+b: 0x7ffe4cd45020
+c: 0x7ffe4cd45024
+```
+结果很明显了, 不解释了.
+
+我们不仅可以显式指定结构体内某个成员的地址对齐, 也可以显式指定整个结构体的对齐方式. 
+```c
+typedef struct st{
+    char a;
+    short b;
+    int c;
+}__attribute__((aligned(16))) data;
+```
+
+打印:
+```shell
+size: 16
+a: 0x7ffcd7fe79b0
+b: 0x7ffcd7fe79b2
+c: 0x7ffcd7fe79b4
+```
+a占了2个字节, b 也是2个字节, 剩下的都是c开始的字节. 结构体自身是占8个字节, 而指定结构体整体是16个字节对齐之后, 那么还要补8个字节, 到达16个字节.
+
+## 思考
+
+编译器一定会按照aligned指定的方式对齐吗?
+
+通过这个属性声明, 其实只是建议编译器按照这种大小地址对齐, 但`不能超过编译器允许的最大值`. 
+
+一个编译器, 对每个基本数据类型都有默认的最大边界对齐字节数. 如果超过了, 则编译器只能按照它规定的最大对齐字节数来给变量分配地址. 
+```c
+char c1 = 3;
+__attribute__((aligned(16))) char c2 = 4;
+
+int main (int argc, char *argv[])
+{
+    printf("c1: %p\n",&c1); 
+    printf("c2: %p\n",&c2); 
+    return 0;
+}
+```
+指定char型的变量c2以16字节对齐，编译运行结果如下。
+
+```shell
+c1: 0x55e8e3ad9010
+c2: 0x55e8e3ad9020
+```
+
+如果我们继续修改c2变量按`32字节`对齐, 你会发现程序的运行结果`不再有变化`, 编译器仍然分配一个16字节对齐的地址, 这是因为32字节的对齐方式已经超过编译器允许的最大值了.
+
+## 属性声明: packed
+
+aligned属性一般用来增大变量的地址对齐, 元素之间因为地址对齐会造成一定的内存空洞. 而`packed属性则与之相反`, 一般`用来减少地址对齐`, 指定变量或类型使用最可能小的地址对齐方式:
+
+```c
+typedef struct st{
+    char a;
+    short b __attribute__((packed)); 
+    int c __attribute__((packed));
+} data;
+
+int main (int argc, char *argv[])
+{
+    data s;
+    printf("size: %zd\n",sizeof(s)); 
+    printf("a: %p\n",&s.a); 
+    printf("b: %p\n",&s.b); 
+    printf("c: %p\n",&s.c); 
+    return 0;
+}
+```
+我们将结构体的成员b和c使用packed属性声明，就是告诉编译器，尽量使用最可能小的地址对齐给它们分配地址，尽可能地减少内存空洞: 
+```shell
+./aligned
+size: 7
+a: 0x7ffda1312ae1
+b: 0x7ffda1312ae2
+c: 0x7ffda1312ae4
+```
+
+通过结果我们看到，结构体内各个成员地址的分配，使用最小1字节的对齐方式，没有任何内存空间的浪费，导致整个结构体的大小只有7字节。
+
+这个特性在底层驱动开发中还是非常有用的:
+
+例如，你想定义一个结构体，封装一个IP控制器的各种寄存器，在ARM芯片中，每一个控制器的寄存器地址空间一般都是连续存在的。如果考虑数据对齐，则结构体内就可能有空洞，就和实际连续的寄存器地址不一致。使用packed可以避免这个问题，结构体的每个成员都紧挨着，依次分配存储地址，这样就避免了各个成员因地址对齐而造成的内存空洞。
+```c
+typedef struct st{
+    char a;
+    short b; 
+    int c; 
+} __attribute__((packed)) data;
+
+```
+
+我们也可以对整个结构体添加packed属性，这和分别对每个成员添加packed属性效果是一样的。修改结构体后，重新编译程序，运行结果和上面程序的运行结果相同：结构体的大小为7，结构体内各成员地址相同。
+
+## 内核中的aligned、packed声明
+
+在Linux内核源码中, 我们经常看到aligned和packed一起使用, 即对一个变量或类型同时使用aligned和packed属性声明.
+
+这样做的好处是: 既避免了结构体内各成员因地址对齐产生内存空, 又指定了整个结构体的对齐方式. 
+```c
+typedef struct st{
+    char a;
+    short b; 
+    int c; 
+} __attribute__((packed,aligned(8))) data;
+int main (int argc, char *argv[])
+{
+    data s;
+    printf("size: %zd\n",sizeof(s)); 
+    printf("a: %p\n",&s.a); 
+    printf("b: %p\n",&s.b); 
+    printf("c: %p\n",&s.c); 
+    return 0;
+}
+```
+程序运行结果如下。
+```shell
+size: 8
+a: 0x7ffde3b37320
+b: 0x7ffde3b37321
+c: 0x7ffde3b37323
+成员都是1字节对齐, 但整个结构体是8字节对齐.
+```
+
+
+在上面的程序, 结构体data虽然使用了packed属性声明, 结构体内所有成员所占的存储空间为7字节, 但是我们同时使用了aligned(8)指定结构体按8字节地址对齐, 所以编译器要在结构体后面填充1字节，这样整个结构体的大小就变为8字节, 按8字节地址对齐. 
+
+# 属性声明: format
+
+## 变参函数的格式检查
+
+GNU通过`__attribute__`扩展的format属性, 来指定`变参函数的参数格式检查`.
+
+使用方法:
+- `__attribute__(( format(archetype, string-index, first-to-check))); 
+- `void LOG(const char *fmt, ...) __attribute__((format(printf,1,2))); 
+
+在一些商业项目中, 我们经常会实现一些自定义的打印调试函数, 甚至实现一个独立的日志打印模块. 
+
+这些自定义的打印函数往往是变参函数, 用户在调用这些接口函数时参数往往不固定, 那么编译器在编译程序时, 怎么知道我们的参数格式对不对呢? 如何对我们传进去的实参做格式检查呢?
+
+因为我们实现的是变参函数, 参数的个数和格式都不确定, 所以编译器表示压力很大, 不知道该如何处理. 
+
+`__attribute__`的`format属性`这时候就派上用场了. 
+
+在上面的示例代码中, 我们定义一个`LOG()`变参函数, 用来实现日志打印功能. 编译器在编译程序时, 如何检查LOG()函数的参数格式是否正确呢? 方法其实很简单, 通过给`LOG()`函数添加`__attribute__((format(printf,1,2)))`属性声明就可以了. 
+
+这个属性声明告诉编译器: 你知道printf()函数不? 你怎么对printf()函数进行参数格式检查的, 就按照同样的方法, 对LOG()函数进行检查. 
+
+属性`format(printf, 1, 2)`有3个参数: 
+- 第1个参数printf是告诉编译器, 按照printf()函数的标准来检查;
+- 第2个参数表示在LOG()函数`所有的参数列表中格式字符串`的位置索引;
+- 第3个参数是告诉编译器`要检查的参数的起始位置`.
+
+通过format(printf, 1, 2) 属性声明, 告诉编译器: LOG()函数的参数, 其格式字符串的位置在所有参数列表中的索引是1, 即第一个参数; 要编译器帮忙检查的参数, 在所有的参数列表里索引是2. 知道了LOG()参数列表中格式字符串的位置和要检查的参数位置, 编译器就会按照检查printf的格式打印一样, 对LOG()函数进行参数检查了. 
+
+举例:
+`printf("size = %d %d %d \n", a,b,c);`
+- printf中, 第一个参数是格式字符串, 对应的是`format(printf, 1, 2)`中的`1`.
+- printf中, %d代表的占位符, 其实际参数, 是第二个参数a, 即参数的起始位置是2. 对应`format(printf, 1, 2)`中的2.
+
+格式字符串:
+- 如果一个字符串中含有格式匹配符, 那么这个字符串就是格式字符串. 
+- 如格式字符串`"I have %d apple \n"`里面含有格式匹配符%d, 我们也可以叫它占位符. 打印的时候, 后面变参的值会代替这个占位符, 在屏幕上显示出来. 
+
+`void LOG(const char *fmt, ...) __attribute__((format(printf,1,2)));`
+
+- `LOG("I have %d apple %d banana \n", 5, 6);`
+- 上面的声明就是, 按照printf的参数检查方式来检查LOG里的参数就行了.
+	- LOG里的第1个参数, 就是字符串格式
+	- 第2个参数, 就是实际参数的起始位置.
+
+- `LOG("I have %d apple \n", 5);`
+	- 在这个LOG()函数中有2个参数, 第1个参数是格式字符串，
+	- 第2个参数是要打印的一个常量值5, 用来匹配格式字符串中的占位符. 
+
+我们也可以把LOG函数定义为以下形式:
+- `void LOG(int n, char *fmt, ...) __attribute__((format(printf,2,3)));`
+- 在这个函数定义中, 多了一个参数n, 格式字符串在参数列表中的位置发生了变化(在所有的参数列表中, 索引由1变成了2), 要检查的第一个变参的位置也发生了变化(索引从原来的2变成了3). 那么我们使用format属性声明时. 就要写成format(printf, 2, 3)的形式了. 
+
+## 变参函数的设计与实现
+
+对于变参函数，编译器或操作系统一般会提供一些宏给程序员使用，用来解析函数的参数列表，这样程序员就不用自己解析了，直接调用封装好的宏即可获取参数列表。编译器提供的宏有以下3种。
+- va_list: 定义在编译器头文件stdarg.h中, 如`typedef char *va_list;`
+- va_start(fmt, args): 根据参数args的地址, 获取args后面参数的地址, 并保存在fmt指针变量中. 
+- va_end(args): 释放args指针, 将其赋值为NULL. 
+
+```c
+看一下linux 4.4内核 中的定义:
+#ifndef _VALIST
+#define _VALIST
+typedef char *va_list;
+#endif
+
+typedef int s32;
+typedef s32 acpi_native_int;
+
+#define _AUPBND  (sizeof(acpi_native_int) - 1)
+#define _ADNBND  (sizeof(acpi_native_int) - 1)
+
+#define  _bnd(x, bnd)   (((sizeof(x))+(bnd)) & (~(bnd)))
+#define  va_arg(ap, T)  (*(T *)(( (ap) += (_bnd(T, _ADNBND) )))
+#define  va_end(ap)     (ap = (va_list) NULL)
+#define  va_start(ap,A) (void)((ap)= (char *)&(A) + (_bnd (A,_AUPBND))))
+复杂的宏都是为了保证安全, 不出叉子. 保证偏移量总是对的.
+```
+
+上面使用编译器提供的三个宏，省去了解析参数的麻烦。但打印的时候，我们还必须自己实现。
+
+我们继续改进，使用vprintf()函数完成打印功能。vprintf()函数的声明在stdio.h头文件中:
+```c
+CRTIMP int __cdecl __MINGW_NOTHROW \
+	vprintf(const char*, __VALIST);
+```
+
+vprintf()函数有两个参数：一个是格式字符串指针，一个是变参列表。
+```c
+#include<stdio.h>
+#include<stdarg.h>
+
+void my_print(char *fmt, ...)
+{
+	va_list args;
+	va_start(args,fmt);
+	vprintf(fmt, args);
+	va_end(args);
+}
+
+int main (int argc, char *argv[])
+{
+    my_print("%d %d %d %d\n", 1,2,3,4);
+    return 0;
+}
+```
+结果就打印: 1 2 3 4 了.
+
+上面的myprintf()函数基本上实现了和printf()函数相同的功能：支持变参，支持多种格式的数据打印。接下来，我们需要对其添加format属性声明，让编译器在编译时，像检查printf()一样，检查myprintf()函数的参数格式。
+
+```c
+void __attribute__((format(printf,1,2))) my_print(char *fmt,...)
+{
+    va_list args;
+    va_start(args,fmt);
+    vprintf(fmt,args);
+    va_end(args);
+}
+```
+
+然后我们就可以搞一个log函数:
+```c
+#define DEBUG
+void __attribute__((format(printf,2,3))) LOG(int k,char *fmt,...)
+{
+#if DEBUG
+    va_list args;
+    va_start(args,fmt);
+    vprintf(fmt,args);
+    va_end(args);
+#endif
+}
+```
+
+Linux内核里也有:
+```c
+__attribute__((format(printf,1,2))) void mpsslog(char *format, ...);
+```
+不同子系统用的log接口都不一样.
+
+```c
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
+#define DBG_INFO 1
+#define DBG_MAP  2
+#define DBG_REG  4
+#define DBG_ADV  8
+#define DBG_CAL  16
+
+__attribute__((format(printf, 4, 5)))
+void _tda_printk(struct tda18271_priv *state, const char *level,
+		 const char *func, const char *fmt, ...);
+
+#define tda_printk(st, lvl, fmt, arg...)			\
+	_tda_printk(st, lvl, __func__, fmt, ##arg)
+
+#define tda_dprintk(st, lvl, fmt, arg...)			\
+do {								\
+	if (tda18271_debug & lvl)				\
+		tda_printk(st, KERN_DEBUG, fmt, ##arg);		\
+} while (0)
+
+#define tda_info(fmt, arg...)	pr_info(fmt, ##arg)
+#define tda_warn(fmt, arg...)	tda_printk(priv, KERN_WARNING, fmt, ##arg)
+#define tda_err(fmt, arg...)	tda_printk(priv, KERN_ERR,     fmt, ##arg)
+#define tda_dbg(fmt, arg...)	tda_dprintk(priv, DBG_INFO,    fmt, ##arg)
+#define tda_map(fmt, arg...)	tda_dprintk(priv, DBG_MAP,     fmt, ##arg)
+#define tda_reg(fmt, arg...)	tda_dprintk(priv, DBG_REG,     fmt, ##arg)
+#define tda_cal(fmt, arg...)	tda_dprintk(priv, DBG_CAL,     fmt, ##arg)
+
+#define tda_fail(ret)							     \
+({									     \
+	int __ret;							     \
+	__ret = (ret < 0);						     \
+	if (__ret)							     \
+		tda_printk(priv, KERN_ERR,				     \
+			   "error %d on line %d\n", ret, __LINE__);	     \
+	__ret;								     \
+})
+```
+
+```c
+#include  <stdio.h>
+#include  <stdarg.h>
+
+#define ERR_LEVEL 1
+#define WARN_LEVEL 2
+#define INFO_LEVEL 3
+
+#define DEBUG_LEVEL 3
+/*
+ * 0 关闭打印
+ * 1 只打印错误信息
+ * 2 打印警告和错误
+ * 3 打印所有信息
+ */
+
+void __attribute__((format(printf,1,2))) INFO(char *fmt, ...)
+{
+	#if (DEBUG_LEVEL >= INFO_LEVEL)
+	va_list args;
+	va_start(args, fmt);
+	vprintf(fmt,args);
+	va_end(args);
+	#endif
+}
+
+void __attribute__((format(printf,1,2))) WARN(char *fmt, ...)
+{
+	#if (DEBUG_LEVEL >= WARN_LEVEL)
+	va_list args;
+	va_start(args, fmt);
+	vprintf(fmt,args);
+	va_end(args);
+	#endif
+}
+
+void __attribute__((format(printf,1,2))) ERR(char *fmt, ...)
+{
+	#if (DEBUG_LEVEL >= ERR_LEVEL)
+	va_list args;
+	va_start(args, fmt);
+	vprintf(fmt,args);
+	va_end(args);
+	#endif
+}
+
+```
+在上面的程序中，我们封装了3个打印函数：INFO()、WARN()和ERR()，分别打印不同优先级的日志信息。在实际调试中，我们可以根据自己需要的打印信息，设置合适的打印等级，就可以分级控制这些打印信息了.
+
+# 属性声明: const
+
+使用方法
+- `int func( int a) __attribute__((const));`
+
+作用:
+- 优化程序
+- 编译的时候需要配合优化选项.
+
+```c
+int __attribute__((const)) square(int n)
+{
+    printf("square:\n");
+    return n*n;
+}
+
+int main(void)
+{
+    int sum=0;
+    for(int i=0;i<10;i++)
+        sum +=square(4);
+    printf("sum = %d\n",sum);
+    return 0;
+}
+```
+优化过之后: 
+square 只执行一次.
+
+用的不多. 知道就行. 内核也有用到, 见到知道就行了.
+
+# 属性声明: weak
+
+## 强符号和弱符号
+
+之前说过的编译 链接过程.
+
+GNU C通过weak属性声明, 可以将一个强符号转换为弱符号. 使用方法如下. 
+```c
+void __attribute__((weak)) func(void);
+int num __attribute__((weak));
+```
+
+- 强符号：函数名，初始化的全局变量名。
+- 弱符号：未初始化的全局变量名。
+
+在一个工程项目中，对于相同的全局变量名、函数名，我们一般可以归结为下面3种场景。
+- 强符号+强符号 -> 冲突报错
+- 强符号+弱符号 -> 强
+- 弱符号+弱符号 -> 选size大的
+
+一般来讲，不建议在一个工程中定义多个不同类型的同名弱符号，编译的时候可能会出现各种各样的问题. 也不能同时定义两个同名的强符号，否则就会报重定义错误。我们可以使用GNU C扩展的weak属性，将一个强符号转换为弱符号。
+
+这部分之前学编译的时候已经挺细的了.
+
+```c
+//func.c
+int a = 1;
+int b;
+void func()
+{
+	printf("func: a = %d\n", a);
+	printf("func: b = %d\n", b);
+}
+
+// main.c
+int a;
+int b = 2;
+void func();
+int main()
+{
+	printf("main: a = %d\n", a);
+	printf("main: b = %d\n", b);
+	func();
+	return 0;
+}
+结果打印:
+main: a = 1
+main: b = 2
+func: a = 1
+func: b = 2
+```
+
+然后就可以对不同源文件的 a b 和 func函数 的符号强弱进行改变.
+
+## 强引用与弱引用
+
+链接处理:
+- 强引用: 未找到定义时, 会报未定义错误
+- 弱引用: 未找到定义时, 不会报错, 会默认设置为0或者一个特殊值  
+	- 运行时会报错, 函数地址是0 就segmentfault了.
+	- 所以对于弱符号, 先判断函数地址是不是0, 应该就安全了.
+
+## 函数的强符号与弱符号
+
+链接器对于同名函数冲突，同样遵循相同的规则。函数名本身就是一个强符号，在一个工程中定义两个同名的函数，编译时肯定会报重定义错误。但我们可以通过weak属性声明，将其中一个函数名转换为弱符号。
+
+## 弱符号的用途
+
+在一个源文件中引用一个变量或函数, 当编译器只看到其声明, 而没有看到其定义时, 编译器一般编译不会报错: 编译器会认为这个符号可能在其他文件中定义. 在链接阶段, 链接器会到其他文件中找这些符号的定义, 若未找到, 则报未定义错误. 
+
+当函数被声明为一个弱符号时, 会有一个奇特的地方: 当链接器找不到这个函数的定义时, 也不会报错. 编译器会将这个函数名, 即弱符号, 设置为0或一个特殊的值. 只有当程序运行时, 调用到这个函数, 跳转到零地址或一个特殊的地址才会报错, 产生一个内存错误.
+- ![](assets/Pasted%20image%2020230505200036.png)
+	- ![](assets/Pasted%20image%2020230505200046.png)
+
+为了防止函数运行出错，我们可以在运行这个函数之前，先进行判断，看这个函数名的地址是不是0，然后决定是否调用和运行，这样就可以避免段错误了。
+- ![](assets/Pasted%20image%2020230505200124.png)
+
+函数名的本质就是一个地址，在调用func()之前，我们先判断其是否为0，如果为0，则不调用，直接跳过。你会发现，通过这样的设计，即使func()函数没有定义，整个工程也能正常编译、链接和运行！
+
+弱符号的这个特性，在库函数中应用得很广泛。如你在开发一个库时，基础功能已经实现，有些高级功能还没实现，那么你可以将这些函数通过weak属性声明转换为一个弱符号。通过这样设置，即使还没有定义函数，我们在应用程序中只要在调用之前做一个非零的判断就可以
+了，并不影响程序的正常运行。等以后发布新的库版本，实现了这些高级功能，应用程序也不需要进行任何修改，直接运行就可以调用这些高级功能。
+
+# 属性声明: alias
+
+GNU C扩展了一个alias属性, 这个属性很简单, 主要用来给函数定义一个别名. 
+- ![](assets/Pasted%20image%2020230505200331.png)
+
+- 用法:
+	- `函数声明 __attribute__((alias("别名")));`
+	- 然后调用别名跟调用原名是一样的.
+
+通过alias属性声明, 我们可以给__f()函数定义一个别名f(), 以后如果想调用__f()函数, 则直接通过f()调用即可. 
+
+在Linux内核中, 你会发现alias有时会和weak属性一起使用. 如有些函数随着内核版本升级, 函数接口发生了变化, 我们可以通过alias属性对这个旧的接口名字进行封装, 重新起一个接口名字. 
+
+# 属性声明: constructor & destructor
+
+这东西类似C++的构造函数和析构函数, gnu c扩展借鉴了这个机制, 扩充了C标准.
+
+使用方法:
+- `__attribute__((constructor)) int init_func(void);`
+- `__attribute__((destructor)) int exit_func(void);`
+
+用的话, 也不知道哪里真正会用到. 但是知道 有个印象就行. 见到能认识就好了.
+
+当一个函数被属性声明为 这俩属性的时候, 其运行与之前就不同了.
+- 属性声明为constructor时, 即使你不显式调用, 进入main函数之前, 也会自动调用它. 
+- 属性声明为destructor时, 即使你不显式调用, 在再出main函数后, 也会自动执行它.
+
+```c
+#include <stdio.h>
+
+__attribute__((constructor)) void init_func()
+{
+    puts("init_func");
+}
+
+__attribute__((destructor)) void exit_func()
+{
+    puts("exit_func");
+}
+
+int main (int argc, char *argv[])
+{
+    puts("hello world");
+    return 0;
+}
+
+打印如下:
+./constructor
+init_func
+hello world
+exit_func
+```
+
+回忆:
+- 程序的真正入口是`_start` 
+- 跳到main之前, 需要初始化C语言的运行环境.
+- 退出main之后, 会把main 的返回值 交给exit()函数.
+
+# 内联函数
+
+## 属性声明: noinline
+
+与内联函数相关的两个属性: noinline和always_inline. 这两个属性的用途是告诉编译器, 在编译时, 对我们指定的函数内联展开或不展开. 使用方法:
+- `static inline __attribute__((noinline)) int func();`
+- `static inline __attribute__((always_inline)) int func();`
+
+- 一个使用inline声明的函数被称为内联函数, 内联函数一般前面会有static和extern修饰. 
+- 使用inline声明一个内联函数, 和使用关键字register声明一个寄存器变量一样, 只是`建议`编译器在编译时内联展开. 
+- 使用关键字register修饰一个变量, 只是建议编译器在为变量分配存储空间时, 将这个变量放到寄存器里, 这会使程序的运行效率更高.
+- 编译器会不会放, 这得视具体情况而定, 编译器要根据寄存器资源是否紧张, 这个变量的类型及是否频繁使用来做权衡. 
+- 同样, 当一个函数使用inline关键字修饰时, 编译器在编译时也`不一定会`内联展开. 编译器也会根据实际情况, 如函数体大小, 函数体内是否有循环结构, 是否有指针, 是否有递归, 函数调用是否频繁来做决定. 
+	- 如GCC编译器, 一般是不会对函数做内联展开的, 只有当编译优化等级开到-O2以上时, 才会考虑是否内联展开. 
+- 但是在我们使用noinline和always_inline对一个内联函数作显式属性声明后, 编译器的编译行为就变得确定了: 使用noinline声明, 就是告诉编译器不要展开; 使用always_inline属性声明, 就是告诉编译器要内联展开. 
+
+## 什么是内联函数
+
+说起内联函数, 又不得不说函数`调用开销`. 一个函数在执行过程中, 如果需要调用其他函数, 则一般会执行下面的过程. 
+- 保存当前函数现场
+- 跳到调用函数执行
+- 恢复当前函数现场
+- 继续执行当前函数
+
+如有一个ARM程序, 在main()函数中对一些数据进行处理, 运算结果暂时保存在R0寄存器中. 接着调用另外一个func()函数, 调用结束后, 返回main()函数继续处理数据. 如果我们在func ()函数中要使用R0这个寄存器(用于保存函数的返回值), 就会改变R0寄存器中的值, 那么就篡改了main ()函数中的暂存运算结果. 当我们返回main ()函数继续进行数据处理时, 最后的结果肯定不正确. 
+
+那么怎么办呢? 很简单, 在跳到func()函数执行之前, 先把R0寄存器的值保存到堆栈中, func()函数执行结束后, 再将堆栈中的值恢复到R0寄存器, 这样main()函数就可以继续执行了, 就像什么事情都没有发生过一样. 
+
+现在的计算机系统, 无论什么架构和指令集, 一般都采用这种方法. 这种方法虽然麻烦了点, 但至少能解决问题, 无非就是需要不断地保存现场, 恢复现场, 这就是函数调用带来的开销. 
+
+对于一般的函数调用, 这种方法是没有问题的. 但对于一些极端情况, 例如, 一个函数短小精悍, 函数体内只有一行代码, 在程序中被大量频繁地调用. 如果每次调用, 都不断地保存现场, 执行时却发现函数只有一行代码, 接着又要恢复现场, 则来回折腾的开销比较大, 性价比不高. 
+
+函数调用也是如此:
+- 有些函数短小精悍, 而且调用频繁, 调用开销大, 算下来性价比不高, 这时候我们就可以将这个函数声明为内联函数. 
+- 编译器在编译过程中遇到内联函数, 像宏一样, 将内联函数直接在调用处展开, 这样做就减少了函数调用的开销: 直接执行内联函数展开的代码, 不用再保存现场和恢复现场. 
+
+## 内联函数与宏
+
+那我为什么不直接定义一个宏, 非要用一个内联函数呢?
+
+与宏相比, 内联函数有以下优势:
+- 参数类型检查: 内联函数虽然具有宏的展开特性, 但其`本质仍是函数`, 在`编译过程`中, 编译器仍可以`对其进行参数检查`, 而宏不具备这个功能.  (宏展开太无脑)
+- 便于调试: 函数支持的调试功能有断点, 单步等, 内联函数同样支持.
+- 返回值: 内联函数有返回值, 返回一个结果给调用者. 这个优势是`相对于ANSI C`说的, 因为现在宏也可以有返回值和类型了, 如前面使用语句表达式定义的宏.
+- 接口封装: 有些内联函数可以用来封装一个接口, 而宏不具备这个特性.
+
+## 编译器对内联函数的处理
+
+前面提到, 编译器不一定会对这个函数做内联展开。编译器也要根据实际情况进行评估，权衡展开和不展开的利弊，并最终决定要不要展开。
+
+内联函数并也有一些缺点.
+- 降低cache命中率, 取指效率可能会降低, 执行速度慢
+- 内联函数会增大程序的体积
+	- 如果在一个文件中多次调用内联函数, 多次展开, 那么整个程序的体积就会变大, 在一定程度上会降低程序的执行效率. 
+- 函数的作用之一就是提高代码的复用性. 我们将常用的一些代码或代码块封装成函数，进行模块化编程，可以减轻软件开发工作量。
+- 内联函数往往又降低了函数的复用性。
+	- 编译器在对内联函数做展开时，除了检测用户定义的内联函数内部是否有指针、循环、递归，还会在函数执行效率和函数调用开销之间进行权衡。
+- 一般来讲, 判断对一个内联函数是否做展开, 从程序员的角度出发, 主要考虑如下因素: 
+	- 函数体积小
+	- 函数体内无指针赋值、递归、循环等语句
+	- 调用频繁
+
+当我们认为一个函数体积小，而且被大量频繁调用，应该做内联展开时，就可以使用static inline关键字修饰它。但编译器不一定会做内联展开，如果你想明确告诉编译器一定要展开，或者不展开，就可以使用noinline或always_inline对函数做一个属性声明。
+
+```c
+static inline __attribute__((always_inline)) int func(int a)
+{
+	return a+1;
+}
+static inline void print_num(int a)
+{
+	printf("%d \n", a);	
+}
+int main()
+{
+	int i;
+	i = func(3);
+	print_num(10);
+	return 0;
+}
+```
+
+在这个程序中, 我们分别定义两个内联函数: func()和print_num(), 然后使用always_inline对func()函数进行属性声明. 编译这个源文件, 并对生成的可执行文件a.out做反汇编处理, 其汇编代码如下. 
+- ![](assets/Pasted%20image%2020230505220642.png)
+	- 通过反汇编代码可以看到, 因为我们对func()函数作了always_inline属性声明, 所以在编译过程中, 在调用func()函数的地方. 编译器会将func()函数在调用处直接展开. 
+		- 在`<main>`中, 从`mov r3,#3` 到 `str r3, [fp, #-12]` 这一部分.
+
+而对于print_num()函数, 虽然我们对其做了内联声明, 但编译器并没有对其做内联展开, 而是把它当作一个普通函数对待. 
+
+- 还有一个需要注意的细节是:
+当编译器对内联函数做展开处理时, 会直接在调用处展开内联函数的代码, 不再给func()函数本身生成单独的汇编代码. 因为编译器在所有调用该函数的地方都做了内联展开, 没必要再去生成单独的函数汇编指令. 
+
+在这个例子中, 我们发现编译器就没有给func()函数本身生成单独的汇编代码, 编译器只给print_num()函数生成了独立的汇编代码. 
+
+## 内联函数为什么定义在头文件中
+
+在Linux内核中, 你会看到大量的内联函数被定义在头文件中, 而且常常使用static修饰. 
+
+为什么inline函数经常使用static修饰呢? 这个问题在网上也讨论了很久, 听起来各有道理, 从C语言到C++, 甚至有人还拿出了Linux内核作者Linus关于static inline的解释.
+- ![](assets/Pasted%20image%2020230505221313.png)
+
+我们可以这样理解: 内联函数为什么要定义在头文件中呢? 因为它是一个内联函数, 可以像宏一样使用, 任何想使用这个内联函数的源文件, 都不必亲自再去定义一遍, 直接包含这个头文件, 即可`像宏一样使用`. 
+
+那么为什么还要用static修饰呢? 因为我们使用inline定义的内联函数, 编译器不一定会内联展开, 那么当一个工程中多个文件都包含这个内联函数的定义时, 编译时就有可能报重定义错误. 而使用static关键字修饰，则可以将这个函数的作用域限制在各自的文件内, 避免重定义错误的发生.
+
+# 属性声明: mode
+
+作用: 
+- 显式声明一个数据类型的大小
+
+使用示例:
+- `typedef int s8 __attribute__((mode(QI)));`
+- `typedef unsigned int us8 __attribute__((mode(QI)));`
+
+不同平台的编译器, 对于同一个数据类型, 分配的内存空间可能不一样. 依赖具体的硬件平台和编译器环境.
+
+我们就可以定义一个新的数据类型, 同时用mode属性来确定它的大小.
+
+mode属性参数:
+- ![](assets/Pasted%20image%2020230505221935.png)
+
+那么`typedef int s8 __attribute__((mode(QI)));`  s8就相当于是有符号数的8比特 数据类型.
+us8 就是无符号的8比特 数据类型.
+
+```c
+typedef int s8 __attribute__((mode(QI)));
+typedef int s16 __attribute__((mode(HI)));
+typedef int s32 __attribute__((mode(SI)));
+typedef int s64 __attribute__((mode(DI)));
+  
+typedef unsigned int us8 __attribute__((mode(QI)));
+typedef unsigned int us16 __attribute__((mode(HI)));
+typedef unsigned int us32 __attribute__((mode(SI)));
+typedef unsigned int us64 __attribute__((mode(DI)));
+  
+typedef float f32 __attribute__((mode(SF)));
+typedef float f64 __attribute__((mode(DF)));
+
+int main(void)
+{
+	s8 i;
+	printf("i: %d\n",sizeof(i));
+	printf("%d\n",sizeof(s8));
+    printf("%d\n",sizeof(s16));
+    printf("%d\n",sizeof(s32));
+    printf("%d\n",sizeof(s64));
+  
+    printf("%d\n",sizeof(us8));
+    printf("%d\n",sizeof(us16));
+    printf("%d\n",sizeof(us32));
+    printf("%d\n",sizeof(us64));
+    printf("%d\n",sizeof(f32));
+    printf("%d\n",sizeof(f64));
+    return 0;
+}
+```
+
+# 属性声明: noreturn
+
+作用:
+- 修饰一个函数, 没有返回值, 以消除warning.
+
+使用示例
+- `void func( int ) __attribute__((noreturn));`
+
+exit 和 return 的区别:
+- exit 退出当前所在进程.
+	- os加载器会fork一个子进程, 把父进程的内容 cow写时复制到子进程. 如果是从子进程的main函数return退出的, 那么os会调用exit来收拾残局.
+- return  退出当前函数.
+
+有时候在分支处理的时候, 遇到错误直接关掉进程, 而不是从main函数退出. 如果是在一个有返回值的函数里直接退出进程, 那就会报warning. 看个例子:
+
+```c
+#include<stdio.h>
+#include<stdlib.h>
+void __attribute__((noreturn)) cac_exit()
+{
+    exit(1);
+}
+int cac(int num)
+{
+    if(num < 0)
+        cac_exit();
+    else
+        return 5 * num;
+} 
+
+int main(void)
+{
+    int money = 0;
+    money = cac(10);
+    printf("Money = %d\n",money);
+    return 0;
+}
+```
+不加属性声明的看warning:
+```shell
+gcc -Wall noreturn.c -o noreturn
+
+noreturn.c: In function ‘cac’:
+noreturn.c:13:1: warning: control reaches end of non-void function [-Wreturn-type]
+   13 | }
+      | ^
+```
+- ![](assets/Pasted%20image%2020230505224442.png)
+	- 装的插件也会提醒会有warning 虽然是clang 但跟gcc差别不大.
+
+加上上面的`__attribute__((noreturn)) ` warning就没了.
+- ![](assets/Pasted%20image%2020230505224544.png)
+
+# 属性声明: used & unused
+
+作用: 
+- 消除warning
+- 修饰变量和函数
+
+你定义了一个变量, 但是你没有使用过它, 就会报warning说你定义变量, 但没用它.
+
+使用示例:
+- `register int reg asm(“r0”) __attribute__((used));`
+- `static void func(void) __attribute__((used, section(".text")));`
+	- 告诉编译器, 我的func函数一定用的到, 你务必给我把这个函数放到目标文件的.text段.
+
+- `static __attribute__((unused)) int a;`
+	- 告诉编译器, a可能用不到, 你不要报warning了.
+- `static int func(void) __attribute__((unused));`
+	- 这个函数可能用不到, 别报warning.
+- `int fun(__attribute__((unused)) int a, int b);` 
+	- 参数 a 可能用不到, 你别警告.
+
