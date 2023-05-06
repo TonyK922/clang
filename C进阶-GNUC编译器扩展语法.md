@@ -955,6 +955,7 @@ GNU C通过`__attribute__`来声明aligned和packed属性, 指定一个变量或
 - `int a __attribute__((aligned(8))) = 1;`
 - 错误示范: `int a = 1 __attribute__((aligned(8)));`
 	- 通过aligned属性, 可以显式地指定变量a在内存中的地址对齐方式. aligned有一个参数, 表示要按几字节对齐, 使用时要注意, 地址对齐的字节数`必须是2的幂次方`, 否则编译就会出错.
+- `注意:`  这种方式指定对齐, 只能比数据类型所占空间(自然对齐模数)大. 否则不起效果. 比如int型 你`aligned(2)` 是不会改变对齐方式的.
 
 一般情况下, 当我们定义一个变量时, 编译器会按照默认的地址对齐方式, 来给该变量分配一个存储空间地址. 如果该变量是一个int型数据, 那么编译器就会按4字节或4字节的整数倍地址对齐; 如果该变量是一个short型数据, 那么编译器就会按2字节或2字节的整数倍地址对齐; 如果是一个char类型的变量, 那么编译器就会按照1字节地址对齐. 
 ```c
@@ -2204,3 +2205,58 @@ else
     fun3(a);
 ```  
 
+# 局部标签
+
+`__label__`:
+- `__label__ here;` `goto here;`
+
+```c
+#include<stdio.h> 	
+
+void print_star(int num)
+{
+	int i;
+	for(i=1;;i++)
+	{
+		printf("*");
+		if(i == num)
+			goto here;
+	}
+here:
+	printf("\n");
+} 
+
+#define PRINT(num)       \
+({				        \
+	__label__ here;		\
+	int i;				 \
+	for(i=1;;i++)		\
+	{					\
+		printf("*"); 	\
+		if(i == num)	\
+			goto here;	\
+	}					\
+here:					\
+	printf("\n");		\
+})
+
+int main(void)
+{
+	print_star(2);
+	print_star(6);
+	PRINT(5);
+	PRINT(6); 
+	return 0;
+}
+```
+
+在函数`print_start` 内部定义的标签不会冲突, 但是宏不是函数, 宏展开就会出现冲突报错:
+- ![](assets/Pasted%20image%2020230506162214.png)
+
+这个时候只需要在 语句表达式内部定义一个`__label here;` 即可.
+
+# 标号元素
+
+用途
+- 数组, 结构体初始化: 允许初始化值以任意顺序出现
+- 通过数组索引, 或结构体的结构域名直接赋值
