@@ -114,7 +114,7 @@ int main(void) {
 
 ## fopen()
 
-| 函数声明 | FILE * fopen ( const char * filename, const char * mode );   |
+| 函数声明 | `FILE * fopen ( const char * filename, const char * mode ); `  |
 | -------- | ------------------------------------------------------------ |
 | 所在文件 | stdio.h                                                      |
 | 函数功能 | 以 mode 的方式，打开一个 filename 命名的文件，返回一个指向该文件缓冲的 FILE 结构体指针。 |
@@ -444,11 +444,11 @@ while(fscanf(fp, "%s", words) == 1)
 
 - 什么是行
 
-- 行是文本编辑器中的概念，文件流中就是一个字符。这个在不同的平台是有差异的。window 平台 '\r\n'，linux 平台是'\n'
+- 行是文本编辑器中的概念，文件流中就是一个字符。这个在不同的平台是有差异的。window 平台` '\r\n'`，linux 平台是'\n'
 
 - 平台差异
 
-- windows 平台在写入'\n'是会体现为'\r\n'，linux 平台在写入'\n'时会体现为'\n'。windows 平台在读入'\r\n'时，体现为一个字符'\n'，linux 平台在读入'\n'时，体现为一个字符'\n'
+- windows 平台在写入`'\n'`是会体现为`'\r\n'`，linux 平台在写入`'\n'`时会体现为`'\n'`。windows 平台在读入`'\r\n'`时，体现为一个字符`'\n'`，linux 平台在读入`'\n'`时，体现为一个字符`'\n'`
 - linux 读 windows 中的换行，则会多读一个字符，windows 读 linux 中的换行，则没有问题
 
 | 函数声明 | char \*fgets(char \*str,int length,FILE \*fp)        |
