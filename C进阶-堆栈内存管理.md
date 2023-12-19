@@ -771,7 +771,7 @@ p6: 0x8175010
 
 - 将文件映射到内存主要由`mmap()/munmap()`函数来完成. mmap()的函数原型如下:
 	- `void *mmap(void *addr, size_t length,int prot, int flags, int fd, off_t offset);`
-相关的参数:
+	相关的参数:
 - addr: 进程中要映射的虚拟内存起始地址, 一般为NULL. 
 	- addr表示你要将文件映射到进程虚拟空间的地址, 可以显示指定, 也可以设置为NULL, 由系统自动分配.
 	- mmap()映射成功会返给用户一个地址, 这个地址就是文件映射到进程虚拟空间的起始地址. 
